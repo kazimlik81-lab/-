@@ -8,6 +8,8 @@ export type LanguageCode = 'ru' | 'en' | 'tr';
 
 export type TimeFormat = '24h' | '12h';
 
+export type ThemeMode = 'day' | 'night';
+
 export type AppSettings = {
   dailyGoalSteps: number;
   strideLengthMeters: number;
@@ -17,6 +19,7 @@ export type AppSettings = {
   region: string;
   timeZone: string;
   timeFormat: TimeFormat;
+  themeMode: ThemeMode;
 };
 
 export type SettingsDraft = {
@@ -28,6 +31,7 @@ export type SettingsDraft = {
   region: string;
   timeZone: string;
   timeFormat: TimeFormat;
+  themeMode: ThemeMode;
 };
 
 export type DailyRecord = {

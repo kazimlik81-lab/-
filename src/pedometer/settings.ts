@@ -10,6 +10,7 @@ export const createSettingsDraft = (settings: AppSettings): SettingsDraft => ({
   region: settings.region,
   timeZone: settings.timeZone,
   timeFormat: settings.timeFormat,
+  themeMode: settings.themeMode,
 });
 
 const parseRequiredNumber = (rawValue: string, fieldName: string): number => {
@@ -53,6 +54,7 @@ export const parseSettingsDraft = (settingsDraft: SettingsDraft): AppSettings =>
     region,
     timeZone: settingsDraft.timeZone,
     timeFormat: settingsDraft.timeFormat,
+    themeMode: settingsDraft.themeMode,
   };
 };
 
@@ -66,5 +68,8 @@ export const normalizeStoredSettings = (storedSettings: Partial<AppSettings>): A
     region: storedSettings.region ?? defaultSettings.region,
     timeZone: storedSettings.timeZone ?? defaultSettings.timeZone,
     timeFormat: storedSettings.timeFormat ?? defaultSettings.timeFormat,
+    themeMode: storedSettings.themeMode === 'day' || storedSettings.themeMode === 'night'
+      ? storedSettings.themeMode
+      : defaultSettings.themeMode,
   };
 };

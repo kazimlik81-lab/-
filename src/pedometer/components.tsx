@@ -1,9 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps } from 'react';
+import { useMemo, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { colors } from 'src/pedometer/constants';
+import type { ThemeColors } from 'src/pedometer/constants';
 import type { ChoiceOption, HistoryPoint } from 'src/pedometer/types';
+
+type ThemeAwareProps = {
+  themeColors: ThemeColors;
+};
 
 type ActionButtonProps = {
   icon: ComponentProps<typeof Ionicons>['name'];
@@ -11,9 +15,12 @@ type ActionButtonProps = {
   onPress: () => void | Promise<void>;
   tone?: 'primary' | 'neutral' | 'danger';
   disabled?: boolean;
-};
+} & ThemeAwareProps;
 
-export const ActionButton = ({ icon, label, onPress, tone = 'primary', disabled = false }: ActionButtonProps) => {
+export const ActionButton = ({ icon, label, onPress, themeColors, tone = 'primary', disabled = false }: ActionButtonProps) => {
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const iconColor = tone === 'neutral' ? themeColors.primary : themeColors.surface;
+
   return (
     <Pressable
       accessibilityLabel={label}
@@ -27,7 +34,7 @@ export const ActionButton = ({ icon, label, onPress, tone = 'primary', disabled 
         disabled ? styles.disabled : null,
       ]}
     >
-      <Ionicons name={icon} size={18} color={tone === 'neutral' ? colors.primary : colors.textPrimary} />
+      <Ionicons name={icon} size={18} color={iconColor} />
       <Text style={[styles.buttonText, tone === 'neutral' ? styles.neutralButtonText : styles.primaryButtonText]} numberOfLines={1}>
         {label}
       </Text>
@@ -39,13 +46,16 @@ type SegmentControlProps<TValue extends string> = {
   options: ChoiceOption<TValue>[];
   selectedValue: TValue;
   onSelect: (value: TValue) => void;
-};
+} & ThemeAwareProps;
 
 export const SegmentControl = <TValue extends string>({
   options,
   selectedValue,
   onSelect,
+  themeColors,
 }: SegmentControlProps<TValue>) => {
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
   return (
     <View accessibilityRole="tablist" style={styles.segmentControl}>
       {options.map((option) => {
@@ -74,9 +84,11 @@ type ChoiceGroupProps<TValue extends string> = {
   options: ChoiceOption<TValue>[];
   selectedValue: TValue;
   onSelect: (value: TValue) => void;
-};
+} & ThemeAwareProps;
 
-export const ChoiceGroup = <TValue extends string>({ label, options, selectedValue, onSelect }: ChoiceGroupProps<TValue>) => {
+export const ChoiceGroup = <TValue extends string>({ label, options, selectedValue, onSelect, themeColors }: ChoiceGroupProps<TValue>) => {
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
   return (
     <View style={styles.choiceGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -111,13 +123,15 @@ type MetricCardProps = {
   label: string;
   value: string;
   tone?: 'green' | 'blue' | 'warm';
-};
+} & ThemeAwareProps;
 
-export const MetricCard = ({ icon, label, value, tone = 'green' }: MetricCardProps) => {
+export const MetricCard = ({ icon, label, value, themeColors, tone = 'green' }: MetricCardProps) => {
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
   return (
     <View style={styles.metric}>
       <View style={[styles.metricIcon, tone === 'blue' ? styles.blueIcon : tone === 'warm' ? styles.warmIcon : null]}>
-        <Ionicons name={icon} size={20} color={colors.textPrimary} />
+        <Ionicons name={icon} size={20} color={themeColors.surface} />
       </View>
       <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
         {value}
@@ -133,9 +147,11 @@ type SettingsFieldProps = {
   value: string;
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
   onChangeText: (value: string) => void;
-};
+} & ThemeAwareProps;
 
-export const SettingsField = ({ label, suffix, value, keyboardType = 'default', onChangeText }: SettingsFieldProps) => {
+export const SettingsField = ({ label, suffix, value, keyboardType = 'default', onChangeText, themeColors }: SettingsFieldProps) => {
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -144,8 +160,8 @@ export const SettingsField = ({ label, suffix, value, keyboardType = 'default', 
           accessibilityLabel={label}
           keyboardType={keyboardType}
           onChangeText={onChangeText}
-          selectionColor={colors.primary}
-          placeholderTextColor={colors.textMuted}
+          selectionColor={themeColors.primary}
+          placeholderTextColor={themeColors.textMuted}
           style={styles.input}
           value={value}
         />
@@ -158,10 +174,11 @@ export const SettingsField = ({ label, suffix, value, keyboardType = 'default', 
 type HistoryChartProps = {
   points: HistoryPoint[];
   formatSteps: (steps: number) => string;
-};
+} & ThemeAwareProps;
 
-export const HistoryChart = ({ points, formatSteps }: HistoryChartProps) => {
+export const HistoryChart = ({ points, formatSteps, themeColors }: HistoryChartProps) => {
   const maximumSteps = Math.max(1, ...points.map((point) => point.steps));
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   return (
     <View style={styles.chart}>
@@ -186,10 +203,10 @@ export const HistoryChart = ({ points, formatSteps }: HistoryChartProps) => {
   );
 };
 
-export const styles = StyleSheet.create({
+const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   button: {
     alignItems: 'center',
-    borderColor: colors.highlight,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderRadius: 18,
     borderTopWidth: 1,
@@ -198,33 +215,33 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: 14,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 8, height: 8 },
     shadowOpacity: 0.36,
     shadowRadius: 18,
     elevation: 7,
   },
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: themeColors.primary,
   },
   neutralButton: {
-    backgroundColor: colors.surface,
+    backgroundColor: themeColors.surface,
   },
   dangerButton: {
-    backgroundColor: colors.danger,
+    backgroundColor: themeColors.danger,
   },
   buttonText: {
     fontSize: 14,
     fontWeight: '800',
   },
   primaryButtonText: {
-    color: colors.surface,
+    color: themeColors.surface,
   },
   neutralButtonText: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
   },
   pressed: {
-    backgroundColor: colors.surfacePressed,
+    backgroundColor: themeColors.surfacePressed,
     shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 0.22,
     shadowRadius: 9,
@@ -235,13 +252,13 @@ export const styles = StyleSheet.create({
     opacity: 0.5,
   },
   segmentControl: {
-    backgroundColor: colors.surfaceInset,
-    borderColor: colors.shadow,
+    backgroundColor: themeColors.surfaceInset,
+    borderColor: themeColors.shadow,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row',
     padding: 4,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: -3, height: -3 },
     shadowOpacity: 0.32,
     shadowRadius: 8,
@@ -256,23 +273,23 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   activeSegment: {
-    backgroundColor: colors.surface,
-    borderColor: colors.highlight,
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderTopWidth: 1,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 5, height: 5 },
     shadowOpacity: 0.34,
     shadowRadius: 12,
     elevation: 5,
   },
   segmentText: {
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
     fontSize: 13,
     fontWeight: '800',
   },
   activeSegmentText: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
   },
   choiceGroup: {
     gap: 8,
@@ -283,8 +300,8 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   choice: {
-    backgroundColor: colors.surface,
-    borderColor: colors.highlight,
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderRadius: 16,
     borderTopWidth: 1,
@@ -295,36 +312,36 @@ export const styles = StyleSheet.create({
     minWidth: '30%',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 6, height: 6 },
     shadowOpacity: 0.32,
     shadowRadius: 14,
     elevation: 5,
   },
   activeChoice: {
-    backgroundColor: colors.primaryMuted,
-    borderColor: colors.primary,
+    backgroundColor: themeColors.primaryMuted,
+    borderColor: themeColors.primary,
     shadowOffset: { width: 2, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 2,
   },
   choiceLabel: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
     fontSize: 13,
     fontWeight: '800',
   },
   activeChoiceLabel: {
-    color: colors.primary,
+    color: themeColors.primary,
   },
   choiceDescription: {
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
     fontSize: 11,
     lineHeight: 15,
   },
   metric: {
-    backgroundColor: colors.surface,
-    borderColor: colors.highlight,
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderRadius: 18,
     borderTopWidth: 1,
@@ -333,7 +350,7 @@ export const styles = StyleSheet.create({
     minHeight: 126,
     minWidth: 0,
     padding: 16,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 9, height: 9 },
     shadowOpacity: 0.36,
     shadowRadius: 20,
@@ -341,32 +358,32 @@ export const styles = StyleSheet.create({
   },
   metricIcon: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderColor: colors.highlight,
+    backgroundColor: themeColors.primary,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderRadius: 12,
     borderTopWidth: 1,
     height: 34,
     justifyContent: 'center',
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     width: 34,
   },
   blueIcon: {
-    backgroundColor: colors.blue,
+    backgroundColor: themeColors.blue,
   },
   warmIcon: {
-    backgroundColor: colors.warning,
+    backgroundColor: themeColors.warning,
   },
   metricValue: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
     fontSize: 22,
     fontWeight: '900',
   },
   metricLabel: {
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -374,26 +391,26 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   fieldLabel: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
     fontSize: 14,
     fontWeight: '800',
   },
   inputRow: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceInset,
-    borderColor: colors.shadow,
+    backgroundColor: themeColors.surfaceInset,
+    borderColor: themeColors.shadow,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     minHeight: 50,
     paddingHorizontal: 12,
-    shadowColor: colors.highlight,
+    shadowColor: themeColors.highlight,
     shadowOffset: { width: -4, height: -4 },
     shadowOpacity: 0.22,
     shadowRadius: 8,
   },
   input: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
@@ -401,14 +418,14 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   inputSuffix: {
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
     fontSize: 14,
     fontWeight: '700',
   },
   chart: {
     alignItems: 'flex-end',
-    backgroundColor: colors.surface,
-    borderColor: colors.highlight,
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
     borderLeftWidth: 1,
     borderRadius: 18,
     borderTopWidth: 1,
@@ -416,7 +433,7 @@ export const styles = StyleSheet.create({
     gap: 5,
     minHeight: 254,
     padding: 12,
-    shadowColor: colors.shadow,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: 9, height: 9 },
     shadowOpacity: 0.36,
     shadowRadius: 20,
@@ -429,8 +446,8 @@ export const styles = StyleSheet.create({
     minWidth: 0,
   },
   barTrack: {
-    backgroundColor: colors.surfaceInset,
-    borderColor: colors.shadow,
+    backgroundColor: themeColors.surfaceInset,
+    borderColor: themeColors.shadow,
     borderRadius: 10,
     borderWidth: 1,
     height: 156,
@@ -439,26 +456,26 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   barFill: {
-    backgroundColor: colors.blue,
+    backgroundColor: themeColors.blue,
     borderRadius: 9,
     minHeight: 7,
     width: '100%',
   },
   currentBarFill: {
-    backgroundColor: colors.primary,
+    backgroundColor: themeColors.primary,
   },
   chartLabel: {
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
     fontSize: 11,
     fontWeight: '800',
     maxWidth: '100%',
     textTransform: 'capitalize',
   },
   currentText: {
-    color: colors.primary,
+    color: themeColors.primary,
   },
   chartValue: {
-    color: colors.textPrimary,
+    color: themeColors.textPrimary,
     fontSize: 10,
     fontWeight: '700',
     maxWidth: '100%',

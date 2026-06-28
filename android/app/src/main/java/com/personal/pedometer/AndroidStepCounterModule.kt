@@ -19,6 +19,17 @@ class AndroidStepCounterModule(
   @ReactMethod
   fun start(promise: Promise) {
     try {
+      val isSensorSupported = hasSupportedStepSensor()
+      if (!isSensorSupported) {
+        reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+          .edit()
+          .putBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, false)
+          .putBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+          .apply()
+        promise.resolve(createStatusMap(isRunningOverride = false, isSensorAvailableOverride = false))
+        return
+      }
+
       val serviceIntent = Intent(reactContext, AndroidStepCounterService::class.java)
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -27,7 +38,12 @@ class AndroidStepCounterModule(
         reactContext.startService(serviceIntent)
       }
 
-      promise.resolve(createStatusMap())
+      reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, true)
+        .putBoolean(AndroidStepCounterService.KEY_RUNNING, true)
+        .apply()
+      promise.resolve(createStatusMap(isRunningOverride = true, isSensorAvailableOverride = true))
     } catch (error: Exception) {
       promise.reject("ANDROID_STEP_COUNTER_START_FAILED", error)
     }
@@ -60,7 +76,10 @@ class AndroidStepCounterModule(
     return stepCounter != null || stepDetector != null
   }
 
-  private fun createStatusMap(isRunningOverride: Boolean? = null): WritableNativeMap {
+  private fun createStatusMap(
+    isRunningOverride: Boolean? = null,
+    isSensorAvailableOverride: Boolean? = null
+  ): WritableNativeMap {
     val preferences = reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
     val todayDateKey = AndroidStepCounterService.getTodayDateKey()
     val storedDateKey = preferences.getString(AndroidStepCounterService.KEY_DATE, todayDateKey) ?: todayDateKey
@@ -69,8 +88,13 @@ class AndroidStepCounterModule(
     } else {
       0
     }
-    val isSensorAvailable = preferences.getBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, hasSupportedStepSensor())
     val isRunning = isRunningOverride ?: preferences.getBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+    val isSensorAvailable = isSensorAvailableOverride
+      ?: if (isRunning) {
+        preferences.getBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, hasSupportedStepSensor())
+      } else {
+        hasSupportedStepSensor()
+      }
 
     return WritableNativeMap().apply {
       putInt("todaySteps", todaySteps)

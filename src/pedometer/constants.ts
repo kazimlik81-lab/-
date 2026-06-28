@@ -1,25 +1,54 @@
-import type { AppSettings, ChoiceOption, HistoryPeriod, LanguageCode, TimeFormat, ViewMode } from 'src/pedometer/types';
+import type { AppSettings, ChoiceOption, HistoryPeriod, LanguageCode, ThemeMode, TimeFormat, ViewMode } from 'src/pedometer/types';
 
-export const colors = {
-  background: '#2A2832',
-  surface: '#3A3842',
-  surfaceMuted: '#34323C',
-  surfaceInset: '#302E37',
-  surfacePressed: '#393741',
-  textPrimary: '#F0EDF7',
-  textSecondary: '#B3ADBF',
-  textMuted: '#837C92',
-  borderSubtle: '#4D4764',
-  highlight: '#595374',
-  shadow: '#18161D',
-  primary: '#686FCC',
-  primaryMuted: '#464A77',
-  blue: '#5F66B7',
-  blueMuted: '#414562',
-  warning: '#D48B6A',
-  warningMuted: '#584236',
-  danger: '#D96F85',
-  dangerMuted: '#5A3441',
+export const nightThemeColors = {
+  background: '#171619',
+  surface: '#242128',
+  surfaceMuted: '#2A2830',
+  surfaceInset: '#1E1C22',
+  surfacePressed: '#313039',
+  textPrimary: '#F2EEF6',
+  textSecondary: '#C8C0D0',
+  textMuted: '#8F8798',
+  borderSubtle: '#46404F',
+  highlight: '#5A5266',
+  shadow: '#0B0A0D',
+  primary: '#59B98E',
+  primaryMuted: '#244D3C',
+  blue: '#6B8EDB',
+  blueMuted: '#2E3E69',
+  warning: '#D99552',
+  warningMuted: '#533B2A',
+  danger: '#D8627D',
+  dangerMuted: '#552B38',
+};
+
+export type ThemeColors = typeof nightThemeColors;
+
+export const dayThemeColors: ThemeColors = {
+  background: '#F3F5F0',
+  surface: '#FFFFFF',
+  surfaceMuted: '#EDF1EA',
+  surfaceInset: '#E7EBE4',
+  surfacePressed: '#DDE5DC',
+  textPrimary: '#1F2933',
+  textSecondary: '#53606B',
+  textMuted: '#7C8791',
+  borderSubtle: '#CBD4CC',
+  highlight: '#FFFFFF',
+  shadow: '#BEC8C1',
+  primary: '#267A5D',
+  primaryMuted: '#D7E9DF',
+  blue: '#326DA8',
+  blueMuted: '#D9E5F2',
+  warning: '#B66C2D',
+  warningMuted: '#F1E2D3',
+  danger: '#B94E61',
+  dangerMuted: '#F1D9DE',
+};
+
+export const themeColorsByMode: Record<ThemeMode, ThemeColors> = {
+  day: dayThemeColors,
+  night: nightThemeColors,
 };
 
 export const defaultSettings: AppSettings = {
@@ -31,6 +60,7 @@ export const defaultSettings: AppSettings = {
   region: 'Москва',
   timeZone: 'Europe/Moscow',
   timeFormat: '24h',
+  themeMode: 'night',
 };
 
 export const settingsStorageKey = 'personal-pedometer.settings';
@@ -81,6 +111,11 @@ export const timeZoneOptions: ChoiceOption<string>[] = [
 export const timeFormatOptions: ChoiceOption<TimeFormat>[] = [
   { value: '24h', label: '24 часа' },
   { value: '12h', label: '12 часов' },
+];
+
+export const themeModeOptions: ChoiceOption<ThemeMode>[] = [
+  { value: 'day', label: 'Дневной', description: 'Светлый экран для яркого освещения' },
+  { value: 'night', label: 'Ночной', description: 'Темный экран для вечера и ночи' },
 ];
 
 export const timeZoneByCountry: Record<string, string> = {

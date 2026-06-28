@@ -21,18 +21,22 @@ import kotlin.math.max
 class AndroidStepCounterService : Service(), SensorEventListener {
   private lateinit var sensorManager: SensorManager
   private var activeSensor: Sensor? = null
+  private var hasReceivedStepCounterEvent = false
+  private var wasRunningBeforeCreate = false
   private var lastNotificationSteps: Int = -1
 
   override fun onCreate() {
     super.onCreate()
     sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    wasRunningBeforeCreate = getPreferences().getBoolean(KEY_RUNNING, false)
     startAsForeground()
     registerStepSensor()
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    storeRunningState(true)
-    return START_STICKY
+    val isRegistered = activeSensor != null
+    storeRunningState(isRegistered)
+    return if (isRegistered) START_STICKY else START_NOT_STICKY
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -67,11 +71,23 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       return
     }
 
+    val didRegister = sensorManager.registerListener(this, activeSensor, SensorManager.SENSOR_DELAY_NORMAL)
+
+    if (!didRegister) {
+      activeSensor = null
+      getPreferences().edit()
+        .putBoolean(KEY_SENSOR_AVAILABLE, false)
+        .putBoolean(KEY_RUNNING, false)
+        .apply()
+      updateNotification(0)
+      stopSelf()
+      return
+    }
+
     getPreferences().edit()
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
       .apply()
-    sensorManager.registerListener(this, activeSensor, SensorManager.SENSOR_DELAY_NORMAL)
   }
 
   private fun handleStepCounterEvent(totalSensorSteps: Int) {
@@ -82,7 +98,12 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     var baselineSteps = preferences.getInt(KEY_BASELINE_STEPS, -1)
 
     if (storedDateKey != todayDateKey) {
-      baselineSteps = totalSensorSteps
+      val canContinueFromPreviousSensorValue = storedDateKey != null && (hasReceivedStepCounterEvent || wasRunningBeforeCreate)
+      baselineSteps = if (canContinueFromPreviousSensorValue) {
+        preferences.getInt(KEY_LAST_SENSOR_STEPS, totalSensorSteps)
+      } else {
+        totalSensorSteps
+      }
     }
 
     if (baselineSteps < 0) {
@@ -98,6 +119,7 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
       .apply()
+    hasReceivedStepCounterEvent = true
     updateNotification(todaySteps)
   }
 
