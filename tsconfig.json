@@ -4,5 +4,6 @@
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "strict": true
-  }
+  },
+  "exclude": ["server"]
 }

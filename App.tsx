@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, PermissionsAndroid, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
+  appUpdateCheckIntervalMilliseconds,
   countryOptions,
   defaultSettings,
   historyPeriodOptions,
@@ -25,6 +26,8 @@ import {
   SegmentControl,
   SettingsField,
 } from 'src/pedometer/components';
+import { synchronizeAppUpdates } from 'src/pedometer/app-updates';
+import { FoodCameraSlide } from 'src/pedometer/food-camera';
 import { formatDate, formatDecimal, formatInteger, formatTime } from 'src/pedometer/formatting';
 import { calculateWalkingMetrics, createDailyRecord, getDateKey, getHistoryPoints, getHistorySummary, getStartOfDay } from 'src/pedometer/history';
 import {
@@ -250,8 +253,17 @@ export default function App() {
     return await refreshPromise;
   }, [startTracking]);
 
+  const synchronizeInstalledApp = useCallback(async (): Promise<void> => {
+    const updateSynchronizationResult = await synchronizeAppUpdates();
+
+    if (updateSynchronizationResult.status === 'error') {
+      console.warn(updateSynchronizationResult.message);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
+    void synchronizeInstalledApp();
 
     if (Platform.OS === 'web') {
       return () => {
@@ -262,14 +274,19 @@ export default function App() {
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         void refresh();
+        void synchronizeInstalledApp();
       }
     });
+    const appUpdateInterval = setInterval(() => {
+      void synchronizeInstalledApp();
+    }, appUpdateCheckIntervalMilliseconds);
 
     return () => {
       stopTracking();
       appStateSubscription.remove();
+      clearInterval(appUpdateInterval);
     };
-  }, [refresh, stopTracking]);
+  }, [refresh, stopTracking, synchronizeInstalledApp]);
 
   const saveSettings = async (): Promise<void> => {
     try {
@@ -466,6 +483,7 @@ export default function App() {
         {selectedViewMode === 'today' ? renderTodaySlide() : null}
         {selectedViewMode === 'activity' ? renderActivitySlide() : null}
         {selectedViewMode === 'history' ? renderHistorySlide() : null}
+        {selectedViewMode === 'food' ? <FoodCameraSlide settings={settings} themeColors={themeColors} /> : null}
         {selectedViewMode === 'settings' ? renderSettingsSlide() : null}
       </ScrollView>
     </SafeAreaView>

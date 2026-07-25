@@ -1,4 +1,4 @@
-export type ViewMode = 'today' | 'activity' | 'history' | 'settings';
+export type ViewMode = 'today' | 'activity' | 'history' | 'food' | 'settings';
 
 export type TrackingStatus = 'checking' | 'available' | 'permission-denied' | 'unavailable' | 'error';
 
@@ -64,6 +64,21 @@ export type WalkingMetrics = {
   distanceKilometers: number;
   calories: number;
   activeMinutes: number;
+};
+
+export type FoodCalorieConfidence = 'low' | 'medium' | 'high';
+
+export type FoodCalorieEstimateItem = {
+  name: string;
+  calories: number;
+};
+
+export type FoodCalorieEstimate = {
+  calories: number;
+  confidence: FoodCalorieConfidence;
+  description: string;
+  items: FoodCalorieEstimateItem[];
+  servingNotes: string;
 };
 
 export type ChoiceOption<TValue extends string> = {

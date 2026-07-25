@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { defaultSettings, recordsStorageKey, settingsStorageKey } from 'src/pedometer/constants';
+import { defaultSettings, foodAnalysisApiKeyStorageKey, recordsStorageKey, settingsStorageKey } from 'src/pedometer/constants';
 import { normalizeStoredSettings } from 'src/pedometer/settings';
 import type { AppSettings, DailyRecord, RecordsByDateKey } from 'src/pedometer/types';
 
@@ -40,4 +40,20 @@ export const saveRecord = async (recordsByDateKey: RecordsByDateKey, record: Dai
 
 export const clearRecords = async (): Promise<void> => {
   await AsyncStorage.removeItem(recordsStorageKey);
+};
+
+export const loadFoodAnalysisApiKey = async (): Promise<string | null> => {
+  const rawApiKey = await AsyncStorage.getItem(foodAnalysisApiKeyStorageKey);
+  const apiKey = rawApiKey?.trim();
+  return apiKey && apiKey.length > 0 ? apiKey : null;
+};
+
+export const saveFoodAnalysisApiKey = async (apiKey: string): Promise<void> => {
+  const normalizedApiKey = apiKey.trim();
+
+  if (normalizedApiKey.length < 10) {
+    throw new Error('Введите полный ключ OpenAI.');
+  }
+
+  await AsyncStorage.setItem(foodAnalysisApiKeyStorageKey, normalizedApiKey);
 };

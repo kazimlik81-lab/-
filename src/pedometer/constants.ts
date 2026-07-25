@@ -65,6 +65,19 @@ export const defaultSettings: AppSettings = {
 
 export const settingsStorageKey = 'personal-pedometer.settings';
 export const recordsStorageKey = 'personal-pedometer.records';
+export const foodAnalysisApiKeyStorageKey = 'personal-pedometer.food-analysis-api-key';
+export const appUpdateCheckIntervalMilliseconds = 15 * 60 * 1000;
+
+export const openAiResponsesApiUrl = 'https://api.openai.com/v1/responses';
+export const usdaFoodDataCentralSearchUrl = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+export const defaultUsdaFoodDataCentralApiKey = 'DEMO_KEY';
+export const defaultFoodCalorieVisionModel = 'gpt-5.6-luna';
+export const defaultFoodServingGrams = 200;
+export const foodPhotoJpegQuality = 0.68;
+export const maximumFoodPhotoBytes = 16 * 1024 * 1024;
+export const maximumFoodServingGrams = 5000;
+export const maximumReasonableFoodCalories = 25000;
+export const missingOpenAiApiKeyMessage = 'Сервис оценки калорий не подключен.';
 
 export const localeByLanguageCode: Record<LanguageCode, string> = {
   ru: 'ru-RU',
@@ -76,6 +89,7 @@ export const slideOptions: ChoiceOption<ViewMode>[] = [
   { value: 'today', label: 'Сегодня' },
   { value: 'activity', label: 'Активность' },
   { value: 'history', label: 'История' },
+  { value: 'food', label: 'Еда' },
   { value: 'settings', label: 'Настройки' },
 ];
 

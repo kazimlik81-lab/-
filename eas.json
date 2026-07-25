@@ -1,0 +1,17 @@
+{
+  "cli": {
+    "version": ">= 21.0.2"
+  },
+  "build": {
+    "production": {
+      "channel": "production",
+      "credentialsSource": "local",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
