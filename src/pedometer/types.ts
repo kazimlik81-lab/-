@@ -8,18 +8,26 @@ export type LanguageCode = 'ru' | 'en' | 'tr';
 
 export type TimeFormat = '24h' | '12h';
 
-export type ThemeMode = 'day' | 'night';
+export type DesignVariant =
+  | 'trail'
+  | 'signal'
+  | 'swiss'
+  | 'spa'
+  | 'neon'
+  | 'notebook'
+  | 'chronograph'
+  | 'level'
+  | 'clinic'
+  | 'tide';
 
 export type AppSettings = {
   dailyGoalSteps: number;
   strideLengthMeters: number;
   bodyWeightKilograms: number;
   languageCode: LanguageCode;
-  country: string;
-  region: string;
   timeZone: string;
   timeFormat: TimeFormat;
-  themeMode: ThemeMode;
+  designVariant: DesignVariant;
 };
 
 export type SettingsDraft = {
@@ -27,11 +35,8 @@ export type SettingsDraft = {
   strideLengthCentimeters: string;
   bodyWeightKilograms: string;
   languageCode: LanguageCode;
-  country: string;
-  region: string;
-  timeZone: string;
   timeFormat: TimeFormat;
-  themeMode: ThemeMode;
+  designVariant: DesignVariant;
 };
 
 export type DailyRecord = {

@@ -6,16 +6,14 @@ import { AppState, PermissionsAndroid, Platform, RefreshControl, SafeAreaView, S
 
 import {
   appUpdateCheckIntervalMilliseconds,
-  countryOptions,
   defaultSettings,
+  designVariantOptions,
   historyPeriodOptions,
   languageOptions,
   slideOptions,
+  statusBarStyleByDesignVariant,
   timeFormatOptions,
-  timeZoneByCountry,
-  timeZoneOptions,
-  themeColorsByMode,
-  themeModeOptions,
+  themeColorsByDesignVariant,
 } from 'src/pedometer/constants';
 import type { ThemeColors } from 'src/pedometer/constants';
 import {
@@ -37,7 +35,9 @@ import {
 } from 'src/pedometer/native-step-counter';
 import { createSettingsDraft, parseSettingsDraft } from 'src/pedometer/settings';
 import { clearRecords, loadRecords, loadSettings, saveRecord, saveSettings as saveSettingsToStorage } from 'src/pedometer/storage';
-import type { AppSettings, HistoryPeriod, RecordsByDateKey, SettingsDraft, TrackingStatus, ViewMode } from 'src/pedometer/types';
+import { getDeviceTimeZone } from 'src/pedometer/time-zone';
+import { TodayTrailWidget } from 'src/pedometer/today-trail-widget';
+import type { AppSettings, DesignVariant, HistoryPeriod, RecordsByDateKey, SettingsDraft, TrackingStatus, ViewMode } from 'src/pedometer/types';
 
 const getStatusMessage = (trackingStatus: TrackingStatus): string => {
   switch (trackingStatus) {
@@ -74,7 +74,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const themeColors = useMemo(() => themeColorsByMode[settings.themeMode], [settings.themeMode]);
+  const themeColors = useMemo(() => themeColorsByDesignVariant[settings.designVariant], [settings.designVariant]);
   const appStyles = useMemo(() => createAppStyles(themeColors), [themeColors]);
 
   useEffect(() => {
@@ -94,6 +94,10 @@ export default function App() {
   const historyPoints = useMemo(
     () => getHistoryPoints(historyPeriod, recordsByDateKey, settings),
     [historyPeriod, recordsByDateKey, settings],
+  );
+  const weekHistoryPoints = useMemo(
+    () => getHistoryPoints('week', recordsByDateKey, settings),
+    [recordsByDateKey, settings],
   );
   const historySummary = useMemo(() => getHistorySummary(historyPoints), [historyPoints]);
 
@@ -313,42 +317,45 @@ export default function App() {
     await refresh();
   };
 
-  const updateCountry = (country: string): void => {
+  const selectDesignVariant = async (designVariant: DesignVariant): Promise<void> => {
+    const nextSettings: AppSettings = {
+      ...settingsReference.current,
+      designVariant,
+      timeZone: getDeviceTimeZone(),
+    };
+
+    settingsReference.current = nextSettings;
+    setSettings(nextSettings);
     setSettingsDraft((previousDraft) => ({
       ...previousDraft,
-      country,
-      timeZone: timeZoneByCountry[country] ?? previousDraft.timeZone,
+      designVariant,
     }));
+
+    try {
+      await saveSettingsToStorage(nextSettings);
+      setErrorMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Не удалось сохранить дизайн.');
+      setSelectedViewMode('settings');
+    }
   };
 
   const renderTodaySlide = () => (
     <View style={appStyles.section}>
-      <View style={appStyles.hero}>
-        <Text style={appStyles.heroLabel}>Шаги сегодня</Text>
-        <Text style={appStyles.stepsValue} numberOfLines={1} adjustsFontSizeToFit>
-          {formatInteger(todaySteps, settings)}
-        </Text>
-        <Text style={appStyles.goalText}>
-          цель {formatInteger(settings.dailyGoalSteps, settings)} · осталось {formatInteger(walkingMetrics.remainingSteps, settings)}
-        </Text>
-        <View style={appStyles.progressTrack}>
-          <View style={[appStyles.progressFill, { width: `${Math.round(walkingMetrics.progressRatio * 100)}%` }]} />
-        </View>
-        <Text style={appStyles.progressText}>{Math.round(walkingMetrics.progressRatio * 100)}% дневной цели</Text>
-      </View>
-
-      <View style={appStyles.metricGrid}>
-        <MetricCard icon="map" value={`${formatDecimal(walkingMetrics.distanceKilometers, settings)} км`} label="Дистанция" themeColors={themeColors} />
-        <MetricCard icon="flame" value={`${formatInteger(walkingMetrics.calories, settings)} ккал`} label="Калории" themeColors={themeColors} tone="warm" />
-      </View>
-      <View style={appStyles.metricGrid}>
-        <MetricCard icon="time" value={`${formatInteger(walkingMetrics.activeMinutes, settings)} мин`} label="Активность" themeColors={themeColors} tone="blue" />
-        <MetricCard icon="flag" value={formatInteger(walkingMetrics.remainingSteps, settings)} label="До цели" themeColors={themeColors} />
-      </View>
-      <View style={appStyles.buttonRow}>
-        <ActionButton icon="refresh" label={isRefreshing ? 'Обновляю...' : 'Обновить'} onPress={refresh} themeColors={themeColors} disabled={isRefreshing} />
-        <ActionButton icon="phone-portrait" label="Синхронизировать" onPress={refresh} themeColors={themeColors} tone="neutral" disabled={isRefreshing} />
-      </View>
+      <TodayTrailWidget
+        currentTime={currentTime}
+        formattedActiveMinutes={`${formatInteger(walkingMetrics.activeMinutes, settings)} мин`}
+        formattedCalories={`${formatInteger(walkingMetrics.calories, settings)} ккал`}
+        formattedDistance={`${formatDecimal(walkingMetrics.distanceKilometers, settings, 1)} км`}
+        formattedGoalSteps={formatInteger(settings.dailyGoalSteps, settings)}
+        formattedSteps={formatInteger(todaySteps, settings)}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
+        settings={settings}
+        themeColors={themeColors}
+        walkingMetrics={walkingMetrics}
+        weekHistoryPoints={weekHistoryPoints}
+      />
     </View>
   );
 
@@ -358,7 +365,7 @@ export default function App() {
         <View style={appStyles.infoHeader}>
           <Ionicons name="location" color={themeColors.primary} size={22} />
           <View style={appStyles.infoCopy}>
-            <Text style={appStyles.sectionTitle}>{settings.region}, {settings.country}</Text>
+            <Text style={appStyles.sectionTitle}>Местное время</Text>
             <Text style={appStyles.sectionSubtitle}>
               {formatTime(currentTime, settings)} · {settings.timeZone}
             </Text>
@@ -405,7 +412,7 @@ export default function App() {
     <View style={appStyles.section}>
       <View style={appStyles.sectionHeading}>
         <Text style={appStyles.sectionTitle}>Настройки</Text>
-        <Text style={appStyles.sectionSubtitle}>Настройте цель, язык, время, страну и регион проживания.</Text>
+        <Text style={appStyles.sectionSubtitle}>Настройте цель, язык, дизайн, формат времени и параметры шагомера.</Text>
       </View>
       <SettingsField
         keyboardType="number-pad"
@@ -432,15 +439,7 @@ export default function App() {
         onChangeText={(value) => setSettingsDraft({ ...settingsDraft, bodyWeightKilograms: value })}
       />
       <ChoiceGroup label="Язык" options={languageOptions} selectedValue={settingsDraft.languageCode} onSelect={(value) => setSettingsDraft({ ...settingsDraft, languageCode: value })} themeColors={themeColors} />
-      <ChoiceGroup label="Режим экрана" options={themeModeOptions} selectedValue={settingsDraft.themeMode} onSelect={(value) => setSettingsDraft({ ...settingsDraft, themeMode: value })} themeColors={themeColors} />
-      <ChoiceGroup label="Страна" options={countryOptions} selectedValue={settingsDraft.country} onSelect={updateCountry} themeColors={themeColors} />
-      <SettingsField
-        label="Регион или город"
-        value={settingsDraft.region}
-        themeColors={themeColors}
-        onChangeText={(value) => setSettingsDraft({ ...settingsDraft, region: value })}
-      />
-      <ChoiceGroup label="Часовой пояс" options={timeZoneOptions} selectedValue={settingsDraft.timeZone} onSelect={(value) => setSettingsDraft({ ...settingsDraft, timeZone: value })} themeColors={themeColors} />
+      <ChoiceGroup label="Дизайн" options={designVariantOptions} selectedValue={settingsDraft.designVariant} onSelect={(value) => { void selectDesignVariant(value); }} themeColors={themeColors} />
       <ChoiceGroup label="Формат времени" options={timeFormatOptions} selectedValue={settingsDraft.timeFormat} onSelect={(value) => setSettingsDraft({ ...settingsDraft, timeFormat: value })} themeColors={themeColors} />
       <ActionButton icon="save" label="Сохранить настройки" onPress={saveSettings} themeColors={themeColors} />
       <ActionButton icon="trash" label="Очистить историю" onPress={clearHistory} themeColors={themeColors} tone="neutral" />
@@ -449,7 +448,12 @@ export default function App() {
 
   return (
     <SafeAreaView style={appStyles.safeArea}>
-      <StatusBar style={settings.themeMode === 'day' ? 'dark' : 'light'} />
+      <StatusBar style={statusBarStyleByDesignVariant[settings.designVariant]} />
+      <View style={appStyles.contours}>
+        <View style={[appStyles.contourLine, appStyles.contourLineTop]} />
+        <View style={[appStyles.contourLine, appStyles.contourLineMiddle]} />
+        <View style={[appStyles.contourLine, appStyles.contourLineBottom]} />
+      </View>
       <ScrollView
         contentContainerStyle={appStyles.content}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={themeColors.primary} colors={[themeColors.primary]} progressBackgroundColor={themeColors.surface} />}
@@ -494,11 +498,47 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: themeColors.background,
+    overflow: 'hidden',
+  },
+  contours: {
+    bottom: 0,
+    left: 0,
+    opacity: 0.5,
+    pointerEvents: 'none',
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  contourLine: {
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 320,
+    borderWidth: 1,
+    height: 180,
+    position: 'absolute',
+    width: 720,
+  },
+  contourLineTop: {
+    left: -120,
+    top: 26,
+    transform: [{ rotate: '-6deg' }],
+  },
+  contourLineMiddle: {
+    right: -180,
+    top: 230,
+    transform: [{ rotate: '8deg' }],
+  },
+  contourLineBottom: {
+    bottom: 40,
+    left: -210,
+    transform: [{ rotate: '-4deg' }],
   },
   content: {
+    alignSelf: 'center',
     gap: 20,
+    maxWidth: 430,
     padding: 20,
     paddingBottom: 36,
+    width: '100%',
   },
   header: {
     alignItems: 'flex-start',
@@ -513,8 +553,8 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   title: {
     color: themeColors.textPrimary,
-    fontSize: 32,
-    fontWeight: '900',
+    fontSize: 28,
+    fontWeight: '800',
     letterSpacing: 0,
   },
   subtitle: {
@@ -526,19 +566,18 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   statusPill: {
     alignItems: 'center',
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
     minHeight: 38,
     paddingHorizontal: 12,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 0.32,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
     shadowRadius: 14,
-    elevation: 5,
+    elevation: 3,
   },
   statusPillText: {
     color: themeColors.textPrimary,
@@ -547,18 +586,17 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   banner: {
     alignItems: 'flex-start',
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
     padding: 16,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 8, height: 8 },
-    shadowOpacity: 0.34,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
     shadowRadius: 18,
-    elevation: 6,
+    elevation: 4,
   },
   successBanner: {
     backgroundColor: themeColors.surface,
@@ -585,7 +623,7 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   sectionTitle: {
     color: themeColors.textPrimary,
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   sectionSubtitle: {
     color: themeColors.textSecondary,
@@ -653,17 +691,16 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   infoPanel: {
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     gap: 16,
     padding: 16,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 9, height: 9 },
-    shadowOpacity: 0.36,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
     shadowRadius: 20,
-    elevation: 7,
+    elevation: 4,
   },
   infoHeader: {
     alignItems: 'flex-start',
@@ -678,7 +715,7 @@ const createAppStyles = (themeColors: ThemeColors) => StyleSheet.create({
   statusLine: {
     alignItems: 'flex-start',
     backgroundColor: themeColors.surfaceInset,
-    borderColor: themeColors.shadow,
+    borderColor: themeColors.borderSubtle,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',

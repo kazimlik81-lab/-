@@ -2,16 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 
-import { maximumFoodPhotoBytes } from 'src/pedometer/constants';
+import { foodPhotoJpegQuality, maximumFoodPhotoBytes } from 'src/pedometer/constants';
 import type { ThemeColors } from 'src/pedometer/constants';
 import { ActionButton, MetricCard } from 'src/pedometer/components';
-import { estimateFoodCaloriesWithDeepSeek } from 'src/pedometer/deepseek-food-calorie-estimator';
-import { recognizeFoodPhotoAutomatically } from 'src/pedometer/food-photo-auto-recognizer';
+import { GeminiFoodCalorieBackendError, estimateFoodCaloriesWithGemini } from 'src/pedometer/gemini-food-calorie-estimator';
+import { createFoodCameraStyles } from 'src/pedometer/food-camera-styles';
 import { formatInteger } from 'src/pedometer/formatting';
 import type { AppSettings, FoodCalorieConfidence, FoodCalorieEstimate } from 'src/pedometer/types';
-import { estimateFoodCaloriesLocally } from 'src/pedometer/usda-food-calorie-estimator';
 
 type FoodCameraSlideProps = {
   settings: AppSettings;
@@ -28,10 +27,12 @@ type FoodCameraMessage = {
 type FoodPhotoForAnalysis = {
   base64Jpeg: string;
   byteSize: number;
-  fileName?: string | null;
+  imageMimeType: string;
   sourceLabel: string;
   uri: string;
 };
+
+const supportedFoodPhotoMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const getConfidenceLabel = (confidence: FoodCalorieConfidence): string => {
   switch (confidence) {
@@ -66,7 +67,17 @@ const getValidatedPhotoByteSize = (base64Jpeg: string, reportedByteSize?: number
   return photoByteSize;
 };
 
-const getPickedFoodPhoto = (pickedAsset: ImagePickerAsset): FoodPhotoForAnalysis => {
+const getPickedImageMimeType = (pickedAsset: ImagePickerAsset): string => {
+  const imageMimeType = pickedAsset.mimeType?.trim().toLocaleLowerCase('en-US') ?? 'image/jpeg';
+
+  if (!supportedFoodPhotoMimeTypes.has(imageMimeType)) {
+    throw new Error('Выберите фото в формате JPG, PNG или WEBP.');
+  }
+
+  return imageMimeType;
+};
+
+const getPickedFoodPhoto = (pickedAsset: ImagePickerAsset, sourceLabel: string): FoodPhotoForAnalysis => {
   if (pickedAsset.type && pickedAsset.type !== 'image') {
     throw new Error('Выберите изображение еды, не видео.');
   }
@@ -78,14 +89,10 @@ const getPickedFoodPhoto = (pickedAsset: ImagePickerAsset): FoodPhotoForAnalysis
   return {
     base64Jpeg: pickedAsset.base64,
     byteSize: getValidatedPhotoByteSize(pickedAsset.base64, pickedAsset.fileSize),
-    fileName: pickedAsset.fileName,
-    sourceLabel: 'загруженное фото',
+    imageMimeType: getPickedImageMimeType(pickedAsset),
+    sourceLabel,
     uri: pickedAsset.uri,
   };
-};
-
-const formatProbabilityPercent = (probability: number): string => {
-  return `${Math.round(probability * 100)}%`;
 };
 
 export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps) => {
@@ -102,35 +109,30 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
     setSelectedPhotoPreviewUri(foodPhoto.uri);
 
     try {
-      setCameraMessage({ text: `Распознаю еду по фото: ${formatMegabytes(foodPhoto.byteSize)}.`, tone: 'info' });
-      const foodRecognition = await recognizeFoodPhotoAutomatically(foodPhoto);
-      setCameraMessage({ text: `Похоже на ${foodRecognition.label}. Отправляю запрос в backend DeepSeek.`, tone: 'info' });
+      setCameraMessage({ text: `Отправляю фото в Gemini AI: ${formatMegabytes(foodPhoto.byteSize)}.`, tone: 'info' });
       let nextCalorieEstimate: FoodCalorieEstimate;
-      let resultMessage: FoodCameraMessage | null = { text: 'Фото распознано, калории рассчитаны через DeepSeek.', tone: 'success' };
-      let servingNotesPrefix = `Автораспознавание: ${foodRecognition.modelLabel}, вероятность ${formatProbabilityPercent(foodRecognition.probability)}. `;
 
       try {
-        nextCalorieEstimate = await estimateFoodCaloriesWithDeepSeek({
-          query: foodRecognition.query,
-          recognitionModelLabel: foodRecognition.modelLabel,
-          recognitionProbability: foodRecognition.probability,
-          recognizedLabel: foodRecognition.label,
-          servingGrams: foodRecognition.servingGrams,
+        nextCalorieEstimate = await estimateFoodCaloriesWithGemini({
+          base64Image: foodPhoto.base64Jpeg,
+          imageMimeType: foodPhoto.imageMimeType,
+          sourceLabel: foodPhoto.sourceLabel,
         });
-      } catch {
-        nextCalorieEstimate = estimateFoodCaloriesLocally({
-          query: foodRecognition.query,
-          servingGrams: foodRecognition.servingGrams,
-        });
-        resultMessage = null;
+      } catch (geminiError) {
+        if (geminiError instanceof GeminiFoodCalorieBackendError && geminiError.isConfigurationError) {
+          setCameraMessage(null);
+          return;
+        }
+
+        throw geminiError;
       }
 
       setCalorieEstimate({
         ...nextCalorieEstimate,
-        description: `Похоже на: ${foodRecognition.label}. ${nextCalorieEstimate.description}`,
-        servingNotes: `${servingNotesPrefix}${nextCalorieEstimate.servingNotes}`,
+        description: nextCalorieEstimate.description,
+        servingNotes: nextCalorieEstimate.servingNotes,
       });
-      setCameraMessage(resultMessage);
+      setCameraMessage({ text: 'Gemini AI распознал фото и рассчитал калории.', tone: 'success' });
     } catch (error) {
       setCameraMessage({
         text: error instanceof Error ? error.message : 'Не удалось автоматически оценить калории по фото.',
@@ -148,7 +150,7 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
         allowsMultipleSelection: false,
         base64: true,
         mediaTypes: ['images'],
-        quality: 1,
+        quality: foodPhotoJpegQuality,
         selectionLimit: 1,
       });
 
@@ -165,10 +167,48 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
         throw new Error('Фото не выбрано.');
       }
 
-      await analyzeFoodPhoto(getPickedFoodPhoto(pickedAsset));
+      await analyzeFoodPhoto(getPickedFoodPhoto(pickedAsset, 'загруженное фото'));
     } catch (error) {
       setCameraMessage({
         text: error instanceof Error ? error.message : 'Не удалось загрузить фото еды.',
+        tone: 'danger',
+      });
+    }
+  }, [analyzeFoodPhoto]);
+
+  const takeFoodPhoto = useCallback(async (): Promise<void> => {
+    try {
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!cameraPermission.granted) {
+        setCameraMessage({ text: 'Разрешите доступ к камере, чтобы сфотографировать еду.', tone: 'warning' });
+        return;
+      }
+
+      const imagePickerResult = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        base64: true,
+        mediaTypes: ['images'],
+        quality: foodPhotoJpegQuality,
+      });
+
+      if (imagePickerResult.canceled) {
+        setSelectedPhotoPreviewUri(null);
+        setCalorieEstimate(null);
+        setCameraMessage({ text: 'Съемка фото отменена.', tone: 'info' });
+        return;
+      }
+
+      const pickedAsset = imagePickerResult.assets[0];
+
+      if (!pickedAsset) {
+        throw new Error('Фото не получено.');
+      }
+
+      await analyzeFoodPhoto(getPickedFoodPhoto(pickedAsset, 'снимок с камеры'));
+    } catch (error) {
+      setCameraMessage({
+        text: error instanceof Error ? error.message : 'Не удалось сфотографировать еду.',
         tone: 'danger',
       });
     }
@@ -201,8 +241,8 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
       <View style={styles.sourcePanel}>
         <Ionicons name="image" size={36} color={themeColors.primary} />
         <View style={styles.sourceCopy}>
-          <Text style={styles.sourceTitle}>Загрузить фото</Text>
-          <Text style={styles.sourceText}>Выберите одно изображение еды до {foodPhotoLimitLabel}.</Text>
+          <Text style={styles.sourceTitle}>Фото еды</Text>
+          <Text style={styles.sourceText}>Сфотографируйте еду или выберите одно изображение до {foodPhotoLimitLabel}.</Text>
         </View>
       </View>
 
@@ -217,13 +257,23 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
         </View>
       ) : null}
 
-      <ActionButton
-        disabled={isEstimating}
-        icon="cloud-upload"
-        label={isEstimating ? 'Считаю...' : 'Загрузить фото'}
-        onPress={uploadFoodPhoto}
-        themeColors={themeColors}
-      />
+      <View style={styles.actionStack}>
+        <ActionButton
+          disabled={isEstimating}
+          icon="camera"
+          label={isEstimating ? 'Считаю...' : 'Сфотографировать'}
+          onPress={takeFoodPhoto}
+          themeColors={themeColors}
+        />
+        <ActionButton
+          disabled={isEstimating}
+          icon="cloud-upload"
+          label="Загрузить фото"
+          onPress={uploadFoodPhoto}
+          themeColors={themeColors}
+          tone="neutral"
+        />
+      </View>
 
       {calorieEstimate ? (
         <View style={styles.resultPanel}>
@@ -273,177 +323,3 @@ export const FoodCameraSlide = ({ settings, themeColors }: FoodCameraSlideProps)
     </View>
   );
 };
-
-const createFoodCameraStyles = (themeColors: ThemeColors) => StyleSheet.create({
-  section: {
-    gap: 16,
-  },
-  sectionHeading: {
-    gap: 6,
-  },
-  sectionTitle: {
-    color: themeColors.textPrimary,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  sectionSubtitle: {
-    color: themeColors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sourcePanel: {
-    alignItems: 'center',
-    backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 124,
-    padding: 16,
-    shadowColor: themeColors.shadow,
-    shadowOffset: { width: 9, height: 9 },
-    shadowOpacity: 0.36,
-    shadowRadius: 20,
-    elevation: 7,
-  },
-  sourceCopy: {
-    flex: 1,
-    gap: 5,
-    minWidth: 0,
-  },
-  sourceTitle: {
-    color: themeColors.textPrimary,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  sourceText: {
-    color: themeColors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  messagePanel: {
-    alignItems: 'flex-start',
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 16,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    padding: 12,
-  },
-  infoMessage: {
-    backgroundColor: themeColors.surface,
-  },
-  successMessage: {
-    backgroundColor: themeColors.primaryMuted,
-  },
-  warningMessage: {
-    backgroundColor: themeColors.warningMuted,
-  },
-  dangerMessage: {
-    backgroundColor: themeColors.dangerMuted,
-  },
-  messageText: {
-    color: themeColors.textPrimary,
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  resultPanel: {
-    backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
-    gap: 14,
-    padding: 16,
-    shadowColor: themeColors.shadow,
-    shadowOffset: { width: 9, height: 9 },
-    shadowOpacity: 0.36,
-    shadowRadius: 20,
-    elevation: 7,
-  },
-  resultHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-  },
-  resultIcon: {
-    alignItems: 'center',
-    backgroundColor: themeColors.warning,
-    borderRadius: 14,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  resultCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  resultLabel: {
-    color: themeColors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  resultCalories: {
-    color: themeColors.textPrimary,
-    fontSize: 30,
-    fontWeight: '900',
-  },
-  resultDescription: {
-    color: themeColors.textPrimary,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
-  },
-  estimateMeta: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  itemsList: {
-    borderColor: themeColors.borderSubtle,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  itemRow: {
-    alignItems: 'center',
-    borderBottomColor: themeColors.borderSubtle,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'space-between',
-    minHeight: 42,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  itemName: {
-    color: themeColors.textPrimary,
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '800',
-    minWidth: 0,
-  },
-  itemCalories: {
-    color: themeColors.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  servingNotes: {
-    color: themeColors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 17,
-  },
-  photoPreview: {
-    alignSelf: 'center',
-    aspectRatio: 3 / 4,
-    borderRadius: 16,
-    height: 140,
-  },
-});

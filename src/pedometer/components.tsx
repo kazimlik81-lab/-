@@ -19,7 +19,7 @@ type ActionButtonProps = {
 
 export const ActionButton = ({ icon, label, onPress, themeColors, tone = 'primary', disabled = false }: ActionButtonProps) => {
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-  const iconColor = tone === 'neutral' ? themeColors.primary : themeColors.surface;
+  const iconColor = tone === 'danger' ? themeColors.surface : themeColors.primary;
 
   return (
     <Pressable
@@ -35,7 +35,7 @@ export const ActionButton = ({ icon, label, onPress, themeColors, tone = 'primar
       ]}
     >
       <Ionicons name={icon} size={18} color={iconColor} />
-      <Text style={[styles.buttonText, tone === 'neutral' ? styles.neutralButtonText : styles.primaryButtonText]} numberOfLines={1}>
+      <Text style={[styles.buttonText, tone === 'danger' ? styles.dangerButtonText : styles.defaultButtonText]} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -69,7 +69,12 @@ export const SegmentControl = <TValue extends string>({
             onPress={() => onSelect(option.value)}
             style={({ pressed }) => [styles.segment, isSelected ? styles.activeSegment : null, pressed ? styles.pressed : null]}
           >
-            <Text style={[styles.segmentText, isSelected ? styles.activeSegmentText : null]} numberOfLines={1} adjustsFontSizeToFit>
+            <Text
+              style={[styles.segmentText, isSelected ? styles.activeSegmentText : null]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.65}
+            >
               {option.label}
             </Text>
           </Pressable>
@@ -206,23 +211,22 @@ export const HistoryChart = ({ points, formatSteps, themeColors }: HistoryChartP
 const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   button: {
     alignItems: 'center',
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 46,
     paddingHorizontal: 14,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 8, height: 8 },
-    shadowOpacity: 0.36,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
     shadowRadius: 18,
-    elevation: 7,
+    elevation: 4,
   },
   primaryButton: {
-    backgroundColor: themeColors.primary,
+    backgroundColor: themeColors.surfaceMuted,
   },
   neutralButton: {
     backgroundColor: themeColors.surface,
@@ -231,20 +235,20 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
     backgroundColor: themeColors.danger,
   },
   buttonText: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  primaryButtonText: {
-    color: themeColors.surface,
-  },
-  neutralButtonText: {
+  defaultButtonText: {
     color: themeColors.textPrimary,
+  },
+  dangerButtonText: {
+    color: themeColors.surface,
   },
   pressed: {
     backgroundColor: themeColors.surfacePressed,
-    shadowOffset: { width: 4, height: 4 },
+    shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.22,
-    shadowRadius: 9,
+    shadowRadius: 10,
     elevation: 2,
     transform: [{ scale: 0.985 }],
   },
@@ -253,40 +257,39 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   segmentControl: {
     backgroundColor: themeColors.surfaceInset,
-    borderColor: themeColors.shadow,
-    borderRadius: 20,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     padding: 4,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: -3, height: -3 },
-    shadowOpacity: 0.32,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
   },
   segment: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 12,
     flex: 1,
     justifyContent: 'center',
     minHeight: 42,
     minWidth: 0,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   activeSegment: {
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderWidth: 1,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 0.34,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.24,
     shadowRadius: 12,
-    elevation: 5,
+    elevation: 3,
   },
   segmentText: {
     color: themeColors.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '700',
   },
   activeSegmentText: {
     color: themeColors.textPrimary,
@@ -301,10 +304,8 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   choice: {
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 16,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 14,
     borderWidth: 1,
     flexGrow: 1,
     gap: 3,
@@ -313,10 +314,10 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 0.32,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
     shadowRadius: 14,
-    elevation: 5,
+    elevation: 3,
   },
   activeChoice: {
     backgroundColor: themeColors.primaryMuted,
@@ -341,33 +342,31 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   metric: {
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     flex: 1,
     gap: 8,
     minHeight: 126,
     minWidth: 0,
     padding: 16,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 9, height: 9 },
-    shadowOpacity: 0.36,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
     shadowRadius: 20,
-    elevation: 7,
+    elevation: 4,
   },
   metricIcon: {
     alignItems: 'center',
     backgroundColor: themeColors.primary,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
+    borderColor: themeColors.borderSubtle,
     borderRadius: 12,
-    borderTopWidth: 1,
+    borderWidth: 1,
     height: 34,
     justifyContent: 'center',
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
     shadowRadius: 8,
     width: 34,
   },
@@ -398,15 +397,15 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   inputRow: {
     alignItems: 'center',
     backgroundColor: themeColors.surfaceInset,
-    borderColor: themeColors.shadow,
+    borderColor: themeColors.borderSubtle,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     minHeight: 50,
     paddingHorizontal: 12,
     shadowColor: themeColors.highlight,
-    shadowOffset: { width: -4, height: -4 },
-    shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
     shadowRadius: 8,
   },
   input: {
@@ -425,19 +424,18 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   chart: {
     alignItems: 'flex-end',
     backgroundColor: themeColors.surface,
-    borderColor: themeColors.highlight,
-    borderLeftWidth: 1,
-    borderRadius: 18,
-    borderTopWidth: 1,
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 5,
     minHeight: 254,
     padding: 12,
     shadowColor: themeColors.shadow,
-    shadowOffset: { width: 9, height: 9 },
-    shadowOpacity: 0.36,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
     shadowRadius: 20,
-    elevation: 7,
+    elevation: 4,
   },
   dayColumn: {
     alignItems: 'center',
@@ -447,7 +445,7 @@ const createStyles = (themeColors: ThemeColors) => StyleSheet.create({
   },
   barTrack: {
     backgroundColor: themeColors.surfaceInset,
-    borderColor: themeColors.shadow,
+    borderColor: themeColors.borderSubtle,
     borderRadius: 10,
     borderWidth: 1,
     height: 156,

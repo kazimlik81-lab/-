@@ -7,15 +7,31 @@ declare const process: {
   };
 };
 
-type DeepSeekFoodCalorieEstimationInput = {
-  query: string;
-  recognitionModelLabel: string;
-  recognitionProbability: number;
-  recognizedLabel: string;
-  servingGrams: number;
+type GeminiFoodCalorieEstimationInput = {
+  base64Image: string;
+  imageMimeType: string;
+  sourceLabel: string;
 };
 
 const defaultFoodCalorieBackendUrl = 'http://localhost:18000/food-calorie-estimate';
+const geminiBackendConfigurationErrorMarkers = [
+  'GEMINI_API_KEY',
+  'API key not valid',
+  'API_KEY_INVALID',
+  'API key expired',
+  'API key missing',
+  'permission',
+];
+
+export class GeminiFoodCalorieBackendError extends Error {
+  readonly isConfigurationError: boolean;
+
+  constructor(message: string, isConfigurationError: boolean) {
+    super(message);
+    this.name = 'GeminiFoodCalorieBackendError';
+    this.isConfigurationError = isConfigurationError;
+  }
+}
 
 const getFoodCalorieBackendUrl = (): string => {
   const configuredUrl = process.env?.EXPO_PUBLIC_FOOD_CALORIE_BACKEND_URL?.trim();
@@ -23,7 +39,13 @@ const getFoodCalorieBackendUrl = (): string => {
 };
 
 const createBackendUnavailableMessage = (backendUrl: string): string => {
-  return `Backend DeepSeek не отвечает по адресу ${backendUrl}. Запустите backend командой npm run backend:deepseek и проверьте DEEPSEEK_API_KEY.`;
+  return `Backend Gemini не отвечает по адресу ${backendUrl}. Запустите backend командой npm run backend:gemini и проверьте GEMINI_API_KEY.`;
+};
+
+const isGeminiBackendConfigurationError = (message: string): boolean => {
+  return geminiBackendConfigurationErrorMarkers.some((configurationErrorMarker) => {
+    return message.toLocaleLowerCase('en-US').includes(configurationErrorMarker.toLocaleLowerCase('en-US'));
+  });
 };
 
 const isObjectRecord = (value: unknown): value is Record<string, unknown> => {
@@ -112,8 +134,8 @@ const extractBackendErrorMessage = (responseBody: unknown): string | null => {
   return typeof errorRecord?.message === 'string' ? errorRecord.message : null;
 };
 
-export const estimateFoodCaloriesWithDeepSeek = async (
-  input: DeepSeekFoodCalorieEstimationInput,
+export const estimateFoodCaloriesWithGemini = async (
+  input: GeminiFoodCalorieEstimationInput,
 ): Promise<FoodCalorieEstimate> => {
   const backendUrl = getFoodCalorieBackendUrl();
   let response: Response;
@@ -139,7 +161,8 @@ export const estimateFoodCaloriesWithDeepSeek = async (
   }
 
   if (!response.ok) {
-    throw new Error(extractBackendErrorMessage(responseBody) ?? `Backend не принял запрос: HTTP ${response.status}.`);
+    const errorMessage = extractBackendErrorMessage(responseBody) ?? `Backend не принял запрос: HTTP ${response.status}.`;
+    throw new GeminiFoodCalorieBackendError(errorMessage, isGeminiBackendConfigurationError(errorMessage));
   }
 
   return parseFoodCalorieEstimate(responseBody);
