@@ -33,7 +33,7 @@ function Install-AutoSyncTask {
 
   $action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $arguments -WorkingDirectory $RepoRoot
   $trigger = New-ScheduledTaskTrigger -AtLogOn
-  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel LeastPrivilege
+  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
 
   Register-ScheduledTask `
     -TaskName $TaskName `
