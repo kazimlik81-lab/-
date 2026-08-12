@@ -31,20 +31,30 @@ function Install-AutoSyncTask {
   $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -IntervalSeconds $IntervalSeconds -QuietCycles $QuietCycles"
   $userId = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
 
-  $action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $arguments -WorkingDirectory $RepoRoot
-  $trigger = New-ScheduledTaskTrigger -AtLogOn
-  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
+  try {
+    $action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $arguments -WorkingDirectory $RepoRoot
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
 
-  Register-ScheduledTask `
-    -TaskName $TaskName `
-    -Action $action `
-    -Trigger $trigger `
-    -Principal $principal `
-    -Description "Automatically commits and pushes Shagritm project changes to GitHub." `
-    -Force | Out-Null
+    Register-ScheduledTask `
+      -TaskName $TaskName `
+      -Action $action `
+      -Trigger $trigger `
+      -Principal $principal `
+      -Description "Automatically commits and pushes Shagritm project changes to GitHub." `
+      -Force | Out-Null
 
-  Write-SyncLog "Installed scheduled task '$TaskName' for $userId."
-  Write-Host "Installed scheduled task '$TaskName'."
+    Write-SyncLog "Installed scheduled task '$TaskName' for $userId."
+    Write-Host "Installed scheduled task '$TaskName'."
+  } catch {
+    $startupDir = [Environment]::GetFolderPath("Startup")
+    $startupScript = Join-Path $startupDir "shagritm-auto-github-sync.cmd"
+    $command = "@echo off`r`nstart `"`" /min `"$powerShellPath`" $arguments`r`n"
+
+    Set-Content -LiteralPath $startupScript -Value $command -Encoding ASCII
+    Write-SyncLog "Scheduled task install failed, installed Startup launcher '$startupScript'. Error: $($_.Exception.Message)"
+    Write-Host "Installed Startup launcher '$startupScript'."
+  }
 }
 
 function Invoke-Git {
