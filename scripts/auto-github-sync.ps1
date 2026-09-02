@@ -13,6 +13,13 @@ $TaskName = "Shagritm Auto GitHub Sync"
 $LogDir = Join-Path $env:LOCALAPPDATA "Shagritm"
 $LogPath = Join-Path $LogDir "auto-github-sync.log"
 $MutexName = "ShagritmAutoGithubSync"
+$GitAutoSyncPathspec = @(
+  ".",
+  ":(exclude,glob)*.apk",
+  ":(exclude,glob)**/*.apk",
+  ":(exclude,glob)*.keystore",
+  ":(exclude,glob)**/*.keystore"
+)
 
 function Write-SyncLog {
   param([string]$Message)
@@ -69,7 +76,7 @@ function Invoke-Git {
 }
 
 function Get-StatusFingerprint {
-  $status = Invoke-Git @("status", "--porcelain=v1", "--untracked-files=all")
+  $status = Invoke-Git (@("status", "--porcelain=v1", "--untracked-files=all", "--") + $GitAutoSyncPathspec)
   return ($status -join [Environment]::NewLine).Trim()
 }
 
@@ -87,7 +94,7 @@ function Invoke-AutoSync {
     return
   }
 
-  Invoke-Git @("add", "-A", "--", ".") | Out-Null
+  Invoke-Git (@("add", "-A", "--") + $GitAutoSyncPathspec) | Out-Null
 
   $staged = Invoke-Git @("diff", "--cached", "--name-only")
   if (-not ($staged -join "").Trim()) {

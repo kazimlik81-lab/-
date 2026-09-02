@@ -29,7 +29,11 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     super.onCreate()
     sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
     wasRunningBeforeCreate = getPreferences().getBoolean(KEY_RUNNING, false)
-    startAsForeground()
+    if (!startAsForeground()) {
+      storeRunningState(false)
+      stopSelf()
+      return
+    }
     registerStepSensor()
   }
 
@@ -65,6 +69,8 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       getPreferences().edit()
         .putBoolean(KEY_SENSOR_AVAILABLE, false)
         .putBoolean(KEY_RUNNING, false)
+        .putString(KEY_LAST_ERROR, ERROR_STEP_SENSOR_UNAVAILABLE)
+        .remove(KEY_ACTIVE_SENSOR_TYPE)
         .apply()
       updateNotification(0)
       stopSelf()
@@ -78,15 +84,20 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       getPreferences().edit()
         .putBoolean(KEY_SENSOR_AVAILABLE, false)
         .putBoolean(KEY_RUNNING, false)
+        .putString(KEY_LAST_ERROR, ERROR_STEP_SENSOR_REGISTER_FAILED)
+        .remove(KEY_ACTIVE_SENSOR_TYPE)
         .apply()
       updateNotification(0)
       stopSelf()
       return
     }
 
+    val activeSensorType = if (activeSensor?.type == Sensor.TYPE_STEP_COUNTER) SENSOR_TYPE_STEP_COUNTER else SENSOR_TYPE_STEP_DETECTOR
     getPreferences().edit()
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
+      .putString(KEY_ACTIVE_SENSOR_TYPE, activeSensorType)
+      .remove(KEY_LAST_ERROR)
       .apply()
   }
 
@@ -95,15 +106,21 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     val todayDateKey = getTodayDateKey()
     val storedDateKey = preferences.getString(KEY_DATE, null)
     val storedSteps = preferences.getInt(KEY_TODAY_STEPS, 0)
+    val lastSensorSteps = preferences.getInt(KEY_LAST_SENSOR_STEPS, -1)
     var baselineSteps = preferences.getInt(KEY_BASELINE_STEPS, -1)
 
     if (storedDateKey != todayDateKey) {
-      val canContinueFromPreviousSensorValue = storedDateKey != null && (hasReceivedStepCounterEvent || wasRunningBeforeCreate)
+      val canContinueFromPreviousSensorValue = storedDateKey != null &&
+        (hasReceivedStepCounterEvent || wasRunningBeforeCreate) &&
+        lastSensorSteps >= 0 &&
+        totalSensorSteps >= lastSensorSteps
       baselineSteps = if (canContinueFromPreviousSensorValue) {
-        preferences.getInt(KEY_LAST_SENSOR_STEPS, totalSensorSteps)
+        lastSensorSteps
       } else {
         totalSensorSteps
       }
+    } else if (baselineSteps >= 0 && lastSensorSteps >= 0 && totalSensorSteps < lastSensorSteps) {
+      baselineSteps = totalSensorSteps - storedSteps
     }
 
     if (baselineSteps < 0) {
@@ -118,6 +135,7 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       .putInt(KEY_TODAY_STEPS, todaySteps)
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
+      .remove(KEY_LAST_ERROR)
       .apply()
     hasReceivedStepCounterEvent = true
     updateNotification(todaySteps)
@@ -135,18 +153,28 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       .putInt(KEY_TODAY_STEPS, todaySteps)
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
+      .remove(KEY_LAST_ERROR)
       .apply()
     updateNotification(todaySteps)
   }
 
-  private fun startAsForeground() {
+  private fun startAsForeground(): Boolean {
     createNotificationChannel()
     val notification = buildNotification(readTodaySteps())
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
+      } else {
+        startForeground(NOTIFICATION_ID, notification)
+      }
+      true
+    } catch (error: SecurityException) {
+      storeServiceError(ERROR_ACTIVITY_RECOGNITION_PERMISSION)
+      false
+    } catch (error: IllegalStateException) {
+      storeServiceError(ERROR_FOREGROUND_SERVICE_START_BLOCKED)
+      false
     }
   }
 
@@ -215,6 +243,13 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     getPreferences().edit().putBoolean(KEY_RUNNING, isRunning).apply()
   }
 
+  private fun storeServiceError(errorMessage: String) {
+    getPreferences().edit()
+      .putString(KEY_LAST_ERROR, errorMessage)
+      .putBoolean(KEY_RUNNING, false)
+      .apply()
+  }
+
   private fun getPreferences() = getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
   companion object {
@@ -225,10 +260,19 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     const val KEY_LAST_SENSOR_STEPS = "last_sensor_steps"
     const val KEY_SENSOR_AVAILABLE = "sensor_available"
     const val KEY_RUNNING = "running"
+    const val KEY_ACTIVE_SENSOR_TYPE = "active_sensor_type"
+    const val KEY_LAST_ERROR = "last_error"
+
+    const val ERROR_ACTIVITY_RECOGNITION_PERMISSION = "Разрешите Physical activity, чтобы Android-шагомер считал шаги."
+    const val ERROR_STEP_SENSOR_UNAVAILABLE = "На этом Android-телефоне нет аппаратного датчика шагов."
+    const val ERROR_STEP_SENSOR_REGISTER_FAILED = "Android не смог подключить датчик шагов."
+    const val ERROR_FOREGROUND_SERVICE_START_BLOCKED = "Android не разрешил запустить фоновый шагомер. Откройте приложение и попробуйте снова."
 
     private const val NOTIFICATION_ID = 4201
     private const val NOTIFICATION_CHANNEL_ID = "personal_pedometer_steps"
     private const val NOTIFICATION_UPDATE_STEP_INTERVAL = 25
+    private const val SENSOR_TYPE_STEP_COUNTER = "step-counter"
+    private const val SENSOR_TYPE_STEP_DETECTOR = "step-detector"
 
     fun getTodayDateKey(): String {
       return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())

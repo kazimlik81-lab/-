@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Pedometer } from 'expo-sensors';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, PermissionsAndroid, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   appUpdateCheckIntervalMilliseconds,
@@ -37,6 +37,7 @@ import { createSettingsDraft, parseSettingsDraft } from 'src/pedometer/settings'
 import { clearRecords, loadRecords, loadSettings, saveRecord, saveSettings as saveSettingsToStorage } from 'src/pedometer/storage';
 import { getDeviceTimeZone } from 'src/pedometer/time-zone';
 import { TodayTrailWidget } from 'src/pedometer/today-trail-widget';
+import { requestAndroidStepCounterPermissions } from 'src/pedometer/android-step-counter-permissions';
 import type { AppSettings, DesignVariant, HistoryPeriod, RecordsByDateKey, SettingsDraft, TrackingStatus, ViewMode } from 'src/pedometer/types';
 
 const getStatusMessage = (trackingStatus: TrackingStatus): string => {
@@ -131,22 +132,27 @@ export default function App() {
       }
 
       if (isAndroidNativeStepCounterAvailable()) {
-        const activityPermission = await PermissionsAndroid.request('android.permission.ACTIVITY_RECOGNITION');
+        const androidPermissions = await requestAndroidStepCounterPermissions();
 
-        if (activityPermission !== PermissionsAndroid.RESULTS.GRANTED) {
+        if (!androidPermissions.isActivityRecognitionGranted) {
           setTrackingStatus('permission-denied');
           return;
-        }
-
-        const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : Number(Platform.Version);
-
-        if (androidVersion >= 33) {
-          await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS');
         }
 
         const syncNativeSteps = async (): Promise<void> => {
           try {
             let status = await getAndroidNativeStepCounterStatus();
+
+            if (!status.isActivityRecognitionGranted) {
+              setTrackingStatus('permission-denied');
+              return;
+            }
+
+            if (status.lastErrorMessage) {
+              setTrackingStatus('error');
+              setErrorMessage(status.lastErrorMessage);
+              return;
+            }
 
             if (!status.isSensorAvailable) {
               setTrackingStatus('unavailable');
@@ -165,6 +171,7 @@ export default function App() {
             setTodaySteps(status.todaySteps);
             await persistToday(status.todaySteps, activeSettings);
             setTrackingStatus('available');
+            setErrorMessage(null);
           } catch (error) {
             setTrackingStatus('error');
             setErrorMessage(error instanceof Error ? error.message : 'Не удалось синхронизировать шагомер.');
@@ -172,6 +179,17 @@ export default function App() {
         };
 
         const status = await startAndroidNativeStepCounter();
+
+        if (!status.isActivityRecognitionGranted) {
+          setTrackingStatus('permission-denied');
+          return;
+        }
+
+        if (status.lastErrorMessage) {
+          setTrackingStatus('error');
+          setErrorMessage(status.lastErrorMessage);
+          return;
+        }
 
         if (!status.isSensorAvailable) {
           setTrackingStatus('unavailable');
@@ -184,6 +202,7 @@ export default function App() {
           void syncNativeSteps();
         }, 3000);
         setTrackingStatus('available');
+        setErrorMessage(null);
         return;
       }
 

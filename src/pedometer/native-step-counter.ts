@@ -5,6 +5,9 @@ export type AndroidStepCounterStatus = {
   dateKey: string;
   isRunning: boolean;
   isSensorAvailable: boolean;
+  isActivityRecognitionGranted: boolean;
+  activeSensorType: 'step-counter' | 'step-detector' | null;
+  lastErrorMessage: string | null;
 };
 
 type AndroidStepCounterModuleContract = {
@@ -16,7 +19,7 @@ type AndroidStepCounterModuleContract = {
 const nativeModule = NativeModules.AndroidStepCounter as AndroidStepCounterModuleContract | undefined;
 
 export const isAndroidNativeStepCounterAvailable = (): boolean => {
-  return Platform.OS === 'android' && nativeModule !== undefined;
+  return Platform.OS === 'android' && nativeModule != null;
 };
 
 export const startAndroidNativeStepCounter = async (): Promise<AndroidStepCounterStatus> => {
