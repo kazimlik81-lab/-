@@ -1,8 +1,27 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.util.Locale
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def expoAppConfig = new JsonSlurper().parse(new File(projectRoot, "app.json")).expo
+def expoUpdatesConfig = expoAppConfig.updates ?: [:]
+def appVersionName = expoAppConfig.version ?: "1.0.1"
+def defaultExpoUpdatesRequestHeaders = JsonOutput.toJson(expoUpdatesConfig.requestHeaders ?: ["expo-channel-name": "production"])
+def configuredExpoUpdatesUrl = findProperty("expoUpdatesUrl") ?: System.getenv("EXPO_UPDATES_URL") ?: expoUpdatesConfig.url ?: ""
+def configuredExpoUpdatesEnabled = findProperty("expoUpdatesEnabled") ?: System.getenv("EXPO_UPDATES_ENABLED") ?: (configuredExpoUpdatesUrl ? "true" : "false")
+def configuredExpoRuntimeVersion = findProperty("expoRuntimeVersion") ?: System.getenv("EXPO_RUNTIME_VERSION") ?: appVersionName
+def configuredExpoUpdatesRequestHeaders = findProperty("expoUpdatesRequestHeaders") ?: System.getenv("EXPO_UPDATES_REQUEST_HEADERS") ?: defaultExpoUpdatesRequestHeaders
+def isReleaseBuildTask = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase(Locale.ROOT).contains("release")
+}
+
+if (isReleaseBuildTask && (!configuredExpoUpdatesUrl || !configuredExpoUpdatesEnabled.toString().toBoolean())) {
+    throw new GradleException("Release APK must be connected to EAS Update. Run `npm run updates:configure` or set EXPO_UPDATES_URL before building.")
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -92,10 +111,16 @@ android {
         applicationId 'com.personal.pedometer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 3
+        versionName appVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        manifestPlaceholders = [
+            expoUpdatesEnabled: configuredExpoUpdatesEnabled,
+            expoUpdatesUrl: configuredExpoUpdatesUrl,
+            expoRuntimeVersion: configuredExpoRuntimeVersion,
+            expoUpdatesRequestHeaders: configuredExpoUpdatesRequestHeaders
+        ]
     }
     signingConfigs {
         debug {
@@ -155,6 +180,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

@@ -1,7 +1,9 @@
 package com.personal.pedometer
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Build
@@ -19,6 +21,30 @@ class AndroidStepCounterModule(
   @ReactMethod
   fun start(promise: Promise) {
     try {
+      val isSensorSupported = hasSupportedStepSensor()
+      val isActivityRecognitionGranted = hasActivityRecognitionPermission()
+
+      if (!isActivityRecognitionGranted) {
+        reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+          .edit()
+          .putBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+          .putString(AndroidStepCounterService.KEY_LAST_ERROR, AndroidStepCounterService.ERROR_ACTIVITY_RECOGNITION_PERMISSION)
+          .apply()
+        promise.resolve(createStatusMap(isRunningOverride = false, isActivityRecognitionGrantedOverride = false))
+        return
+      }
+
+      if (!isSensorSupported) {
+        reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+          .edit()
+          .putBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, false)
+          .putBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+          .putString(AndroidStepCounterService.KEY_LAST_ERROR, AndroidStepCounterService.ERROR_STEP_SENSOR_UNAVAILABLE)
+          .apply()
+        promise.resolve(createStatusMap(isRunningOverride = false, isSensorAvailableOverride = false))
+        return
+      }
+
       val serviceIntent = Intent(reactContext, AndroidStepCounterService::class.java)
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -27,7 +53,13 @@ class AndroidStepCounterModule(
         reactContext.startService(serviceIntent)
       }
 
-      promise.resolve(createStatusMap())
+      reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, true)
+        .putBoolean(AndroidStepCounterService.KEY_RUNNING, true)
+        .remove(AndroidStepCounterService.KEY_LAST_ERROR)
+        .apply()
+      promise.resolve(createStatusMap(isRunningOverride = true, isSensorAvailableOverride = true))
     } catch (error: Exception) {
       promise.reject("ANDROID_STEP_COUNTER_START_FAILED", error)
     }
@@ -46,6 +78,11 @@ class AndroidStepCounterModule(
   fun stop(promise: Promise) {
     try {
       reactContext.stopService(Intent(reactContext, AndroidStepCounterService::class.java))
+      reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+        .remove(AndroidStepCounterService.KEY_LAST_ERROR)
+        .apply()
       promise.resolve(createStatusMap(isRunningOverride = false))
     } catch (error: Exception) {
       promise.reject("ANDROID_STEP_COUNTER_STOP_FAILED", error)
@@ -60,7 +97,16 @@ class AndroidStepCounterModule(
     return stepCounter != null || stepDetector != null
   }
 
-  private fun createStatusMap(isRunningOverride: Boolean? = null): WritableNativeMap {
+  private fun hasActivityRecognitionPermission(): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+      reactContext.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+  }
+
+  private fun createStatusMap(
+    isRunningOverride: Boolean? = null,
+    isSensorAvailableOverride: Boolean? = null,
+    isActivityRecognitionGrantedOverride: Boolean? = null
+  ): WritableNativeMap {
     val preferences = reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
     val todayDateKey = AndroidStepCounterService.getTodayDateKey()
     val storedDateKey = preferences.getString(AndroidStepCounterService.KEY_DATE, todayDateKey) ?: todayDateKey
@@ -69,14 +115,33 @@ class AndroidStepCounterModule(
     } else {
       0
     }
-    val isSensorAvailable = preferences.getBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, hasSupportedStepSensor())
     val isRunning = isRunningOverride ?: preferences.getBoolean(AndroidStepCounterService.KEY_RUNNING, false)
+    val isSensorAvailable = isSensorAvailableOverride
+      ?: if (isRunning) {
+        preferences.getBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, hasSupportedStepSensor())
+      } else {
+        hasSupportedStepSensor()
+      }
+    val isActivityRecognitionGranted = isActivityRecognitionGrantedOverride ?: hasActivityRecognitionPermission()
+    val activeSensorType = preferences.getString(AndroidStepCounterService.KEY_ACTIVE_SENSOR_TYPE, null)
+    val lastErrorMessage = preferences.getString(AndroidStepCounterService.KEY_LAST_ERROR, null)
 
     return WritableNativeMap().apply {
       putInt("todaySteps", todaySteps)
       putString("dateKey", todayDateKey)
       putBoolean("isRunning", isRunning)
       putBoolean("isSensorAvailable", isSensorAvailable)
+      putBoolean("isActivityRecognitionGranted", isActivityRecognitionGranted)
+      if (activeSensorType == null) {
+        putNull("activeSensorType")
+      } else {
+        putString("activeSensorType", activeSensorType)
+      }
+      if (lastErrorMessage == null) {
+        putNull("lastErrorMessage")
+      } else {
+        putString("lastErrorMessage", lastErrorMessage)
+      }
     }
   }
 }

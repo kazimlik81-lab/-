@@ -3,19 +3,36 @@
     "name": "ШагРитм",
     "slug": "shagritm",
     "version": "1.0.1",
+    "runtimeVersion": "1.0.1",
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "url": "https://u.expo.dev/d4209a77-c12e-456d-9318-8c453b222890"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-monkey.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7FFFB"
+    },
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMotionUsageDescription": "ШагРитм uses motion data to count your steps and calculate daily walking progress."
+        "NSMotionUsageDescription": "ШагРитм uses motion data to count your steps and calculate daily walking progress.",
+        "NSCameraUsageDescription": "ШагРитм uses the camera to photograph food and estimate calories.",
+        "NSPhotoLibraryUsageDescription": "ШагРитм uses selected food photos to estimate calories."
       }
     },
     "android": {
       "package": "com.personal.pedometer",
       "permissions": [
         "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.CAMERA",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_HEALTH",
         "android.permission.POST_NOTIFICATIONS"
@@ -30,6 +47,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d4209a77-c12e-456d-9318-8c453b222890"
+      }
+    },
+    "owner": "user3412s-team"
   }
 }
