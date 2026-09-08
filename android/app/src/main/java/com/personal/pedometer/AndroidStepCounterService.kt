@@ -13,10 +13,12 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import com.personal.pedometer.contracts.StepCounterState
+import com.personal.pedometer.contracts.StepCounterUpdateInput
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
 
 class AndroidStepCounterService : Service(), SensorEventListener {
   private lateinit var sensorManager: SensorManager
@@ -54,9 +56,12 @@ class AndroidStepCounterService : Service(), SensorEventListener {
   override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
   override fun onSensorChanged(event: SensorEvent) {
+    val eventTimeMillis = System.currentTimeMillis() -
+      (SystemClock.elapsedRealtimeNanos() - event.timestamp) / NANOSECONDS_PER_MILLISECOND
+    val eventDateKey = getDateKey(eventTimeMillis)
     when (event.sensor.type) {
-      Sensor.TYPE_STEP_COUNTER -> handleStepCounterEvent(event.values.firstOrNull()?.toInt() ?: return)
-      Sensor.TYPE_STEP_DETECTOR -> handleStepDetectorEvent()
+      Sensor.TYPE_STEP_COUNTER -> handleStepCounterEvent(event.values.firstOrNull()?.toInt() ?: return, eventDateKey)
+      Sensor.TYPE_STEP_DETECTOR -> handleStepDetectorEvent(eventDateKey)
     }
   }
 
@@ -101,36 +106,26 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       .apply()
   }
 
-  private fun handleStepCounterEvent(totalSensorSteps: Int) {
+  private fun handleStepCounterEvent(totalSensorSteps: Int, eventDateKey: String) {
     val preferences = getPreferences()
-    val todayDateKey = getTodayDateKey()
-    val storedDateKey = preferences.getString(KEY_DATE, null)
-    val storedSteps = preferences.getInt(KEY_TODAY_STEPS, 0)
-    val lastSensorSteps = preferences.getInt(KEY_LAST_SENSOR_STEPS, -1)
-    var baselineSteps = preferences.getInt(KEY_BASELINE_STEPS, -1)
-
-    if (storedDateKey != todayDateKey) {
-      val canContinueFromPreviousSensorValue = storedDateKey != null &&
-        (hasReceivedStepCounterEvent || wasRunningBeforeCreate) &&
-        lastSensorSteps >= 0 &&
-        totalSensorSteps >= lastSensorSteps
-      baselineSteps = if (canContinueFromPreviousSensorValue) {
-        lastSensorSteps
-      } else {
-        totalSensorSteps
-      }
-    } else if (baselineSteps >= 0 && lastSensorSteps >= 0 && totalSensorSteps < lastSensorSteps) {
-      baselineSteps = totalSensorSteps - storedSteps
-    }
-
-    if (baselineSteps < 0) {
-      baselineSteps = max(0, totalSensorSteps - storedSteps)
-    }
-
-    val todaySteps = max(0, totalSensorSteps - baselineSteps)
-    preferences.edit()
-      .putString(KEY_DATE, todayDateKey)
-      .putInt(KEY_BASELINE_STEPS, baselineSteps)
+    val nextState = calculateStepCounterState(
+      StepCounterUpdateInput(
+        previousState = StepCounterState(
+          dateKey = preferences.getString(KEY_DATE, null),
+          todaySteps = preferences.getInt(KEY_TODAY_STEPS, 0),
+          lastSensorSteps = preferences.getInt(KEY_LAST_SENSOR_STEPS, -1).takeIf { it >= 0 }
+        ),
+        eventDateKey = eventDateKey,
+        totalSensorSteps = totalSensorSteps,
+        canContinueFromPreviousDay = hasReceivedStepCounterEvent || wasRunningBeforeCreate
+      )
+    )
+    val todaySteps = nextState.todaySteps
+    val editor = preferences.edit()
+    AndroidStepHistoryStore(preferences).recordSteps(editor, eventDateKey, todaySteps)
+    editor
+      .putString(KEY_DATE, eventDateKey)
+      .remove(KEY_BASELINE_STEPS)
       .putInt(KEY_LAST_SENSOR_STEPS, totalSensorSteps)
       .putInt(KEY_TODAY_STEPS, todaySteps)
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
@@ -138,29 +133,31 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       .remove(KEY_LAST_ERROR)
       .apply()
     hasReceivedStepCounterEvent = true
-    updateNotification(todaySteps)
+    updateNotification(readTodaySteps())
   }
 
-  private fun handleStepDetectorEvent() {
+  private fun handleStepDetectorEvent(eventDateKey: String) {
     val preferences = getPreferences()
-    val todayDateKey = getTodayDateKey()
     val storedDateKey = preferences.getString(KEY_DATE, null)
-    val currentSteps = if (storedDateKey == todayDateKey) preferences.getInt(KEY_TODAY_STEPS, 0) else 0
+    val currentSteps = if (storedDateKey == eventDateKey) preferences.getInt(KEY_TODAY_STEPS, 0) else 0
     val todaySteps = currentSteps + 1
 
-    preferences.edit()
-      .putString(KEY_DATE, todayDateKey)
+    val editor = preferences.edit()
+    AndroidStepHistoryStore(preferences).recordSteps(editor, eventDateKey, todaySteps)
+    editor
+      .putString(KEY_DATE, eventDateKey)
       .putInt(KEY_TODAY_STEPS, todaySteps)
       .putBoolean(KEY_SENSOR_AVAILABLE, true)
       .putBoolean(KEY_RUNNING, true)
       .remove(KEY_LAST_ERROR)
       .apply()
-    updateNotification(todaySteps)
+    updateNotification(readTodaySteps())
   }
 
   private fun startAsForeground(): Boolean {
     createNotificationChannel()
-    val notification = buildNotification(readTodaySteps())
+    val todaySteps = readTodaySteps()
+    val notification = buildNotification(todaySteps)
 
     return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -168,6 +165,7 @@ class AndroidStepCounterService : Service(), SensorEventListener {
       } else {
         startForeground(NOTIFICATION_ID, notification)
       }
+      lastNotificationSteps = todaySteps
       true
     } catch (error: SecurityException) {
       storeServiceError(ERROR_ACTIVITY_RECOGNITION_PERMISSION)
@@ -179,7 +177,8 @@ class AndroidStepCounterService : Service(), SensorEventListener {
   }
 
   private fun updateNotification(todaySteps: Int) {
-    if (todaySteps == lastNotificationSteps || todaySteps % NOTIFICATION_UPDATE_STEP_INTERVAL != 0) {
+    if (lastNotificationSteps >= 0 && todaySteps >= lastNotificationSteps &&
+      todaySteps - lastNotificationSteps < NOTIFICATION_UPDATE_STEP_INTERVAL) {
       return
     }
 
@@ -273,9 +272,14 @@ class AndroidStepCounterService : Service(), SensorEventListener {
     private const val NOTIFICATION_UPDATE_STEP_INTERVAL = 25
     private const val SENSOR_TYPE_STEP_COUNTER = "step-counter"
     private const val SENSOR_TYPE_STEP_DETECTOR = "step-detector"
+    private const val NANOSECONDS_PER_MILLISECOND = 1_000_000L
 
     fun getTodayDateKey(): String {
-      return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+      return getDateKey(System.currentTimeMillis())
+    }
+
+    private fun getDateKey(timeMillis: Long): String {
+      return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(timeMillis))
     }
   }
 }

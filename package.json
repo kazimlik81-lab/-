@@ -1,6 +1,6 @@
 {
   "name": "shagritm",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~56.0.17",
@@ -43,6 +43,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test:steps": "tsc --project tsconfig.tests.json && node --test .local-build/history-tests/tests/history-sync.test.js",
+    "test:native": "powershell -ExecutionPolicy Bypass -File ./scripts/test-native-step-counter.ps1",
     "typecheck:backend": "tsc --project tsconfig.backend.json"
   },
   "private": true

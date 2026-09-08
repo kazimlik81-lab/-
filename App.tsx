@@ -27,14 +27,17 @@ import {
 import { synchronizeAppUpdates } from 'src/pedometer/app-updates';
 import { FoodCameraSlide } from 'src/pedometer/food-camera';
 import { formatDate, formatDecimal, formatInteger, formatTime } from 'src/pedometer/formatting';
-import { calculateWalkingMetrics, createDailyRecord, getDateKey, getHistoryPoints, getHistorySummary, getStartOfDay } from 'src/pedometer/history';
+import { calculateWalkingMetrics, getDateKey, getHistoryPoints, getHistorySummary, getStartOfDay } from 'src/pedometer/history';
+import { getNativeTodaySteps, mergeNativeStepHistory, StepHistorySynchronizer } from 'src/pedometer/history-sync';
+import type { NativeStepHistory } from 'src/pedometer/contracts/step-history';
 import {
+  clearAndroidNativeStepHistory,
   getAndroidNativeStepCounterStatus,
   isAndroidNativeStepCounterAvailable,
   startAndroidNativeStepCounter,
 } from 'src/pedometer/native-step-counter';
 import { createSettingsDraft, parseSettingsDraft } from 'src/pedometer/settings';
-import { clearRecords, loadRecords, loadSettings, saveRecord, saveSettings as saveSettingsToStorage } from 'src/pedometer/storage';
+import { loadRecords, loadSettings, saveRecords, saveSettings as saveSettingsToStorage } from 'src/pedometer/storage';
 import { getDeviceTimeZone } from 'src/pedometer/time-zone';
 import { TodayTrailWidget } from 'src/pedometer/today-trail-widget';
 import { requestAndroidStepCounterPermissions } from 'src/pedometer/android-step-counter-permissions';
@@ -64,6 +67,8 @@ export default function App() {
   const refreshPromiseReference = useRef<Promise<void> | null>(null);
   const recordsReference = useRef<RecordsByDateKey>({});
   const settingsReference = useRef<AppSettings>(defaultSettings);
+  const trackingSessionReference = useRef(0);
+  const [historySynchronizer] = useState(() => new StepHistorySynchronizer({ load: loadRecords, save: saveRecords }));
 
   const [selectedViewMode, setSelectedViewMode] = useState<ViewMode>('today');
   const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('week');
@@ -77,14 +82,6 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const themeColors = useMemo(() => themeColorsByDesignVariant[settings.designVariant], [settings.designVariant]);
   const appStyles = useMemo(() => createAppStyles(themeColors), [themeColors]);
-
-  useEffect(() => {
-    recordsReference.current = recordsByDateKey;
-  }, [recordsByDateKey]);
-
-  useEffect(() => {
-    settingsReference.current = settings;
-  }, [settings]);
 
   useEffect(() => {
     const timerId = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -102,7 +99,8 @@ export default function App() {
   );
   const historySummary = useMemo(() => getHistorySummary(historyPoints), [historyPoints]);
 
-  const stopTracking = useCallback((): void => {
+  const stopTracking = useCallback((): number => {
+    trackingSessionReference.current = historySynchronizer.beginSession();
     subscriptionReference.current?.remove();
     subscriptionReference.current = null;
 
@@ -110,18 +108,33 @@ export default function App() {
       clearInterval(androidPollingIntervalReference.current);
       androidPollingIntervalReference.current = null;
     }
+    return trackingSessionReference.current;
+  }, [historySynchronizer]);
+
+  const publishRecords = useCallback((records: RecordsByDateKey): void => {
+    recordsReference.current = records;
+    setRecordsByDateKey(records);
   }, []);
 
-  const persistToday = useCallback(async (steps: number, activeSettings = settingsReference.current): Promise<void> => {
-    const record = createDailyRecord(steps, activeSettings);
-    const nextRecords = await saveRecord(recordsReference.current, record);
-    recordsReference.current = nextRecords;
-    setRecordsByDateKey(nextRecords);
-  }, []);
+  const persistHistory = useCallback(async (
+    snapshot: NativeStepHistory,
+    session: number,
+    clearPreviousDays = false,
+  ): Promise<void> => {
+    const now = new Date();
+    const nextRecords = await historySynchronizer.update(session, (records) => mergeNativeStepHistory(
+      clearPreviousDays ? {} : records,
+      snapshot,
+      getDateKey(now),
+      settingsReference.current.dailyGoalSteps,
+      now.toISOString(),
+    ));
+    if (nextRecords && historySynchronizer.isCurrent(session)) publishRecords(nextRecords);
+  }, [historySynchronizer, publishRecords]);
 
   const startTracking = useCallback(
-    async (activeSettings: AppSettings, activeRecords: RecordsByDateKey): Promise<void> => {
-      stopTracking();
+    async (activeRecords: RecordsByDateKey, session: number): Promise<void> => {
+      if (!historySynchronizer.isCurrent(session)) return;
       setTrackingStatus('checking');
       setErrorMessage(null);
 
@@ -133,87 +146,70 @@ export default function App() {
 
       if (isAndroidNativeStepCounterAvailable()) {
         const androidPermissions = await requestAndroidStepCounterPermissions();
+        if (!historySynchronizer.isCurrent(session)) return;
 
         if (!androidPermissions.isActivityRecognitionGranted) {
           setTrackingStatus('permission-denied');
           return;
         }
 
-        const syncNativeSteps = async (): Promise<void> => {
+        let isSynchronizing = false;
+        const syncNativeSteps = async (requestStart = false): Promise<void> => {
+          if (isSynchronizing || !historySynchronizer.isCurrent(session)) return;
+          isSynchronizing = true;
           try {
-            let status = await getAndroidNativeStepCounterStatus();
+            let status = await (requestStart ? startAndroidNativeStepCounter() : getAndroidNativeStepCounterStatus());
+            if (!historySynchronizer.isCurrent(session)) return;
 
+            if (!requestStart && !status.isRunning && status.isSensorAvailable && status.isActivityRecognitionGranted) {
+              status = await startAndroidNativeStepCounter();
+              if (!historySynchronizer.isCurrent(session)) return;
+            }
+
+            const todayKey = getDateKey(new Date());
+            setTodaySteps(getNativeTodaySteps(status, todayKey));
+            await persistHistory(status, session);
+            if (!historySynchronizer.isCurrent(session)) return;
+
+            setErrorMessage(status.lastErrorMessage);
             if (!status.isActivityRecognitionGranted) {
               setTrackingStatus('permission-denied');
-              return;
-            }
-
-            if (status.lastErrorMessage) {
+            } else if (!status.isSensorAvailable) {
+              setTrackingStatus('unavailable');
+            } else if (status.lastErrorMessage) {
               setTrackingStatus('error');
-              setErrorMessage(status.lastErrorMessage);
-              return;
+            } else {
+              setTrackingStatus(status.isRunning ? 'available' : 'checking');
             }
-
-            if (!status.isSensorAvailable) {
-              setTrackingStatus('unavailable');
-              return;
-            }
-
-            if (!status.isRunning) {
-              status = await startAndroidNativeStepCounter();
-            }
-
-            if (!status.isSensorAvailable) {
-              setTrackingStatus('unavailable');
-              return;
-            }
-
-            setTodaySteps(status.todaySteps);
-            await persistToday(status.todaySteps, activeSettings);
-            setTrackingStatus('available');
-            setErrorMessage(null);
           } catch (error) {
+            if (!historySynchronizer.isCurrent(session)) return;
             setTrackingStatus('error');
             setErrorMessage(error instanceof Error ? error.message : 'Не удалось синхронизировать шагомер.');
+          } finally {
+            isSynchronizing = false;
           }
         };
 
-        const status = await startAndroidNativeStepCounter();
-
-        if (!status.isActivityRecognitionGranted) {
-          setTrackingStatus('permission-denied');
-          return;
-        }
-
-        if (status.lastErrorMessage) {
-          setTrackingStatus('error');
-          setErrorMessage(status.lastErrorMessage);
-          return;
-        }
-
-        if (!status.isSensorAvailable) {
-          setTrackingStatus('unavailable');
-          return;
-        }
-
-        setTodaySteps(status.todaySteps);
-        await persistToday(status.todaySteps, activeSettings);
+        // Service startup is asynchronous; keep polling even if its first
+        // snapshot is still initializing or reports the previous run's error.
         androidPollingIntervalReference.current = setInterval(() => {
           void syncNativeSteps();
         }, 3000);
-        setTrackingStatus('available');
-        setErrorMessage(null);
+        await syncNativeSteps(true);
         return;
       }
 
       const isAvailable = await Pedometer.isAvailableAsync();
+      if (!historySynchronizer.isCurrent(session)) return;
       if (!isAvailable) {
         setTrackingStatus('unavailable');
         return;
       }
 
       const existingPermission = await Pedometer.getPermissionsAsync();
+      if (!historySynchronizer.isCurrent(session)) return;
       const permission = existingPermission.granted ? existingPermission : await Pedometer.requestPermissionsAsync();
+      if (!historySynchronizer.isCurrent(session)) return;
       if (!permission.granted) {
         setTrackingStatus('permission-denied');
         return;
@@ -225,22 +221,29 @@ export default function App() {
 
       if (Platform.OS === 'ios') {
         const result = await Pedometer.getStepCountAsync(getStartOfDay(today), today);
+        if (!historySynchronizer.isCurrent(session)) return;
         baseStepCount = result.steps;
       }
 
       baseStepCountReference.current = baseStepCount;
       setTodaySteps(baseStepCount);
-      await persistToday(baseStepCount, activeSettings);
+      await persistHistory({ dateKey: todayKey, todaySteps: baseStepCount, dailySteps: [] }, session);
+      if (!historySynchronizer.isCurrent(session)) return;
 
       subscriptionReference.current = Pedometer.watchStepCount((result) => {
+        if (!historySynchronizer.isCurrent(session)) return;
         const nextSteps = baseStepCountReference.current + result.steps;
-        setTodaySteps(nextSteps);
-        void persistToday(nextSteps, activeSettings);
+        if (getDateKey(new Date()) === todayKey) setTodaySteps(nextSteps);
+        void persistHistory({ dateKey: todayKey, todaySteps: nextSteps, dailySteps: [] }, session).catch((error: unknown) => {
+          if (!historySynchronizer.isCurrent(session)) return;
+          setTrackingStatus('error');
+          setErrorMessage(error instanceof Error ? error.message : 'Не удалось сохранить шаги.');
+        });
       });
 
       setTrackingStatus('available');
     },
-    [persistToday, stopTracking],
+    [historySynchronizer, persistHistory],
   );
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -248,33 +251,38 @@ export default function App() {
       return await refreshPromiseReference.current;
     }
 
+    const session = stopTracking();
+    setIsRefreshing(true);
     const refreshPromise = (async (): Promise<void> => {
-      setIsRefreshing(true);
-
       try {
         const loadedSettings = await loadSettings();
-        const loadedRecords = await loadRecords();
+        if (!historySynchronizer.isCurrent(session)) return;
+        const loadedRecords = await historySynchronizer.load(session);
+        if (!loadedRecords || !historySynchronizer.isCurrent(session)) return;
         const todayKey = getDateKey(new Date());
 
         settingsReference.current = loadedSettings;
-        recordsReference.current = loadedRecords;
         setSettings(loadedSettings);
         setSettingsDraft(createSettingsDraft(loadedSettings));
-        setRecordsByDateKey(loadedRecords);
-        setTodaySteps(loadedRecords[todayKey]?.steps ?? 0);
-        await startTracking(loadedSettings, loadedRecords);
+        publishRecords(loadedRecords);
+        if (!isAndroidNativeStepCounterAvailable()) setTodaySteps(loadedRecords[todayKey]?.steps ?? 0);
+        await startTracking(loadedRecords, session);
       } catch (error) {
+        if (!historySynchronizer.isCurrent(session)) return;
         setTrackingStatus('error');
         setErrorMessage(error instanceof Error ? error.message : 'Не удалось запустить шагомер.');
       } finally {
-        setIsRefreshing(false);
-        refreshPromiseReference.current = null;
+        if (historySynchronizer.isCurrent(session)) setIsRefreshing(false);
       }
     })();
 
     refreshPromiseReference.current = refreshPromise;
-    return await refreshPromise;
-  }, [startTracking]);
+    try {
+      await refreshPromise;
+    } finally {
+      if (refreshPromiseReference.current === refreshPromise) refreshPromiseReference.current = null;
+    }
+  }, [historySynchronizer, publishRecords, startTracking, stopTracking]);
 
   const synchronizeInstalledApp = useCallback(async (): Promise<void> => {
     const updateSynchronizationResult = await synchronizeAppUpdates();
@@ -318,7 +326,16 @@ export default function App() {
       settingsReference.current = nextSettings;
       setSettings(nextSettings);
       setSettingsDraft(createSettingsDraft(nextSettings));
-      await persistToday(todaySteps, nextSettings);
+      const todayKey = getDateKey(new Date());
+      const session = trackingSessionReference.current;
+      const nextRecords = await historySynchronizer.update(session, (records) => {
+        const todayRecord = records[todayKey];
+        return todayRecord ? {
+          ...records,
+          [todayKey]: { ...todayRecord, goalSteps: nextSettings.dailyGoalSteps },
+        } : records;
+      });
+      if (nextRecords && historySynchronizer.isCurrent(session)) publishRecords(nextRecords);
       setErrorMessage(null);
       setSelectedViewMode('today');
     } catch (error) {
@@ -328,12 +345,45 @@ export default function App() {
   };
 
   const clearHistory = async (): Promise<void> => {
-    await clearRecords();
-    recordsReference.current = {};
-    baseStepCountReference.current = 0;
-    setRecordsByDateKey({});
-    setTodaySteps(0);
-    await refresh();
+    if (refreshPromiseReference.current) return;
+    const session = stopTracking();
+    setIsRefreshing(true);
+    const clearPromise = (async (): Promise<void> => {
+      let clearErrorMessage: string | null = null;
+      try {
+        const todayKey = getDateKey(new Date());
+        const snapshot = isAndroidNativeStepCounterAvailable()
+          ? await clearAndroidNativeStepHistory()
+          : { dateKey: todayKey, todaySteps: recordsReference.current[todayKey]?.steps ?? 0, dailySteps: [] };
+        if (!historySynchronizer.isCurrent(session)) return;
+        await persistHistory(snapshot, session, true);
+      } catch (error) {
+        clearErrorMessage = error instanceof Error ? error.message : 'Не удалось очистить историю.';
+      } finally {
+        if (historySynchronizer.isCurrent(session)) {
+          // Clearing past days keeps today's native counter and display intact.
+          // Resume synchronization even when clearing fails.
+          try {
+            await startTracking(recordsReference.current, session);
+          } catch (error) {
+            clearErrorMessage ??= error instanceof Error ? error.message : 'Не удалось запустить шагомер.';
+          }
+          if (historySynchronizer.isCurrent(session)) {
+            if (clearErrorMessage) {
+              setTrackingStatus('error');
+              setErrorMessage(clearErrorMessage);
+            }
+            setIsRefreshing(false);
+          }
+        }
+      }
+    })();
+    refreshPromiseReference.current = clearPromise;
+    try {
+      await clearPromise;
+    } finally {
+      if (refreshPromiseReference.current === clearPromise) refreshPromiseReference.current = null;
+    }
   };
 
   const selectDesignVariant = async (designVariant: DesignVariant): Promise<void> => {
@@ -461,7 +511,7 @@ export default function App() {
       <ChoiceGroup label="Дизайн" options={designVariantOptions} selectedValue={settingsDraft.designVariant} onSelect={(value) => { void selectDesignVariant(value); }} themeColors={themeColors} />
       <ChoiceGroup label="Формат времени" options={timeFormatOptions} selectedValue={settingsDraft.timeFormat} onSelect={(value) => setSettingsDraft({ ...settingsDraft, timeFormat: value })} themeColors={themeColors} />
       <ActionButton icon="save" label="Сохранить настройки" onPress={saveSettings} themeColors={themeColors} />
-      <ActionButton icon="trash" label="Очистить историю" onPress={clearHistory} themeColors={themeColors} tone="neutral" />
+      <ActionButton icon="trash" label="Очистить историю" onPress={clearHistory} themeColors={themeColors} tone="neutral" disabled={isRefreshing} />
     </View>
   );
 

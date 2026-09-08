@@ -9,7 +9,7 @@ apply plugin: "com.facebook.react"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def expoAppConfig = new JsonSlurper().parse(new File(projectRoot, "app.json")).expo
 def expoUpdatesConfig = expoAppConfig.updates ?: [:]
-def appVersionName = expoAppConfig.version ?: "1.0.1"
+def appVersionName = expoAppConfig.version ?: "1.0.2"
 def defaultExpoUpdatesRequestHeaders = JsonOutput.toJson(expoUpdatesConfig.requestHeaders ?: ["expo-channel-name": "production"])
 def configuredExpoUpdatesUrl = findProperty("expoUpdatesUrl") ?: System.getenv("EXPO_UPDATES_URL") ?: expoUpdatesConfig.url ?: ""
 def configuredExpoUpdatesEnabled = findProperty("expoUpdatesEnabled") ?: System.getenv("EXPO_UPDATES_ENABLED") ?: (configuredExpoUpdatesUrl ? "true" : "false")
@@ -111,7 +111,7 @@ android {
         applicationId 'com.personal.pedometer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
+        versionCode 4
         versionName appVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""

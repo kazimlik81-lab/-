@@ -11,6 +11,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
 
 class AndroidStepCounterModule(
@@ -53,13 +54,7 @@ class AndroidStepCounterModule(
         reactContext.startService(serviceIntent)
       }
 
-      reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        .edit()
-        .putBoolean(AndroidStepCounterService.KEY_SENSOR_AVAILABLE, true)
-        .putBoolean(AndroidStepCounterService.KEY_RUNNING, true)
-        .remove(AndroidStepCounterService.KEY_LAST_ERROR)
-        .apply()
-      promise.resolve(createStatusMap(isRunningOverride = true, isSensorAvailableOverride = true))
+      promise.resolve(createStatusMap())
     } catch (error: Exception) {
       promise.reject("ANDROID_STEP_COUNTER_START_FAILED", error)
     }
@@ -67,10 +62,25 @@ class AndroidStepCounterModule(
 
   @ReactMethod
   fun getCurrent(promise: Promise) {
-    try {
-      promise.resolve(createStatusMap())
-    } catch (error: Exception) {
-      promise.reject("ANDROID_STEP_COUNTER_READ_FAILED", error)
+    reactContext.runOnUiQueueThread {
+      try {
+        promise.resolve(createStatusMap())
+      } catch (error: Exception) {
+        promise.reject("ANDROID_STEP_COUNTER_READ_FAILED", error)
+      }
+    }
+  }
+
+  @ReactMethod
+  fun clearHistory(promise: Promise) {
+    reactContext.runOnUiQueueThread {
+      try {
+        val preferences = reactContext.getSharedPreferences(AndroidStepCounterService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        AndroidStepHistoryStore(preferences).clearHistory(AndroidStepCounterService.getTodayDateKey())
+        promise.resolve(createStatusMap())
+      } catch (error: Exception) {
+        promise.reject("ANDROID_STEP_HISTORY_CLEAR_FAILED", error)
+      }
     }
   }
 
@@ -125,9 +135,17 @@ class AndroidStepCounterModule(
     val isActivityRecognitionGranted = isActivityRecognitionGrantedOverride ?: hasActivityRecognitionPermission()
     val activeSensorType = preferences.getString(AndroidStepCounterService.KEY_ACTIVE_SENSOR_TYPE, null)
     val lastErrorMessage = preferences.getString(AndroidStepCounterService.KEY_LAST_ERROR, null)
+    val dailySteps = WritableNativeArray()
+    for ((dateKey, steps) in AndroidStepHistoryStore(preferences).readDailySteps()) {
+      dailySteps.pushMap(WritableNativeMap().apply {
+        putString("dateKey", dateKey)
+        putInt("steps", steps)
+      })
+    }
 
     return WritableNativeMap().apply {
       putInt("todaySteps", todaySteps)
+      putArray("dailySteps", dailySteps)
       putString("dateKey", todayDateKey)
       putBoolean("isRunning", isRunning)
       putBoolean("isSensorAvailable", isSensorAvailable)
