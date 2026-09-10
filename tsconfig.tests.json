@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "outDir": ".local-build/history-tests",
+    "rootDir": ".",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["tests/**/*.test.ts", "scripts/validate-updates-config.ts"]
+}

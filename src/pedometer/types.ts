@@ -1,4 +1,4 @@
-export type ViewMode = 'today' | 'activity' | 'history' | 'settings';
+export type ViewMode = 'today' | 'activity' | 'history' | 'food' | 'settings';
 
 export type TrackingStatus = 'checking' | 'available' | 'permission-denied' | 'unavailable' | 'error';
 
@@ -8,15 +8,26 @@ export type LanguageCode = 'ru' | 'en' | 'tr';
 
 export type TimeFormat = '24h' | '12h';
 
+export type DesignVariant =
+  | 'trail'
+  | 'signal'
+  | 'swiss'
+  | 'spa'
+  | 'neon'
+  | 'notebook'
+  | 'chronograph'
+  | 'level'
+  | 'clinic'
+  | 'tide';
+
 export type AppSettings = {
   dailyGoalSteps: number;
   strideLengthMeters: number;
   bodyWeightKilograms: number;
   languageCode: LanguageCode;
-  country: string;
-  region: string;
   timeZone: string;
   timeFormat: TimeFormat;
+  designVariant: DesignVariant;
 };
 
 export type SettingsDraft = {
@@ -24,10 +35,8 @@ export type SettingsDraft = {
   strideLengthCentimeters: string;
   bodyWeightKilograms: string;
   languageCode: LanguageCode;
-  country: string;
-  region: string;
-  timeZone: string;
   timeFormat: TimeFormat;
+  designVariant: DesignVariant;
 };
 
 export type DailyRecord = {
@@ -60,6 +69,21 @@ export type WalkingMetrics = {
   distanceKilometers: number;
   calories: number;
   activeMinutes: number;
+};
+
+export type FoodCalorieConfidence = 'low' | 'medium' | 'high';
+
+export type FoodCalorieEstimateItem = {
+  name: string;
+  calories: number;
+};
+
+export type FoodCalorieEstimate = {
+  calories: number;
+  confidence: FoodCalorieConfidence;
+  description: string;
+  items: FoodCalorieEstimateItem[];
+  servingNotes: string;
 };
 
 export type ChoiceOption<TValue extends string> = {

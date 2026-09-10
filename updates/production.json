@@ -1,0 +1,8 @@
+{
+  "systemVersion": 1,
+  "platform": "android",
+  "channel": "production",
+  "runtimeVersion": "1.0.2",
+  "nativeSourceRef": "v1.0.2",
+  "nativeSourceCommit": "a2d5c8c8ded2cd047be8cc2960b897de07798cd9"
+}

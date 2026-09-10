@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class AndroidStepCounterPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(AndroidStepCounterModule(reactContext))
+    return listOf(
+      AndroidStepCounterModule(reactContext),
+      AndroidFoodImageLabelerModule(reactContext)
+    )
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

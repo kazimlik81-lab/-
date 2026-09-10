@@ -1,0 +1,180 @@
+import { StyleSheet } from 'react-native';
+
+import type { ThemeColors } from 'src/pedometer/constants';
+
+export const createFoodCameraStyles = (themeColors: ThemeColors) => StyleSheet.create({
+  section: {
+    gap: 16,
+  },
+  sectionHeading: {
+    gap: 6,
+  },
+  sectionTitle: {
+    color: themeColors.textPrimary,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  sectionSubtitle: {
+    color: themeColors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  sourcePanel: {
+    alignItems: 'center',
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
+    borderLeftWidth: 1,
+    borderRadius: 18,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 124,
+    padding: 16,
+    shadowColor: themeColors.shadow,
+    shadowOffset: { width: 9, height: 9 },
+    shadowOpacity: 0.36,
+    shadowRadius: 20,
+    elevation: 7,
+  },
+  sourceCopy: {
+    flex: 1,
+    gap: 5,
+    minWidth: 0,
+  },
+  sourceTitle: {
+    color: themeColors.textPrimary,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  sourceText: {
+    color: themeColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  actionStack: {
+    gap: 10,
+  },
+  messagePanel: {
+    alignItems: 'flex-start',
+    borderColor: themeColors.highlight,
+    borderLeftWidth: 1,
+    borderRadius: 16,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  infoMessage: {
+    backgroundColor: themeColors.surface,
+  },
+  successMessage: {
+    backgroundColor: themeColors.primaryMuted,
+  },
+  warningMessage: {
+    backgroundColor: themeColors.warningMuted,
+  },
+  dangerMessage: {
+    backgroundColor: themeColors.dangerMuted,
+  },
+  messageText: {
+    color: themeColors.textPrimary,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  resultPanel: {
+    backgroundColor: themeColors.surface,
+    borderColor: themeColors.highlight,
+    borderLeftWidth: 1,
+    borderRadius: 18,
+    borderTopWidth: 1,
+    gap: 14,
+    padding: 16,
+    shadowColor: themeColors.shadow,
+    shadowOffset: { width: 9, height: 9 },
+    shadowOpacity: 0.36,
+    shadowRadius: 20,
+    elevation: 7,
+  },
+  resultHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  resultIcon: {
+    alignItems: 'center',
+    backgroundColor: themeColors.warning,
+    borderRadius: 14,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  resultCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  resultLabel: {
+    color: themeColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  resultCalories: {
+    color: themeColors.textPrimary,
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  resultDescription: {
+    color: themeColors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  estimateMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  itemsList: {
+    borderColor: themeColors.borderSubtle,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  itemRow: {
+    alignItems: 'center',
+    borderBottomColor: themeColors.borderSubtle,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  itemName: {
+    color: themeColors.textPrimary,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    minWidth: 0,
+  },
+  itemCalories: {
+    color: themeColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  servingNotes: {
+    color: themeColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  photoPreview: {
+    alignSelf: 'center',
+    aspectRatio: 3 / 4,
+    borderRadius: 16,
+    height: 140,
+  },
+});

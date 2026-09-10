@@ -26,6 +26,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.apk
 
 # macOS
 .DS_Store
@@ -33,6 +34,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+credentials.json
+gemini.env
 
 # typescript
 *.tsbuildinfo
