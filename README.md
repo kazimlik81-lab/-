@@ -62,6 +62,8 @@ npm run preupdate:production
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-auto-github-sync.ps1
 ```
 
+Первая автоматическая публикация выполнена 10 сентября 2026 года: [проверки и публикация в GitHub Actions](https://github.com/kazimlik81-lab/-/actions/runs/34497430347), [обновление в EAS](https://expo.dev/accounts/user3412s-team/projects/shagritm/updates/3a57a59e-acaa-4c8f-9202-871cd7e64153). Пройдены проверка TypeScript и 40 тестов; Android-обновление опубликовано для runtime `1.0.2`.
+
 ## Автообновление приложения на телефонах от компьютера
 
 Для разработки телефоны можно подключить к этому компьютеру как к локальному серверу. В этом режиме приложение на каждом подключенном телефоне берет код с Metro-сервера на компьютере, а изменения в `.ts` и `.tsx` файлах появляются на телефонах автоматически через Fast Refresh.
