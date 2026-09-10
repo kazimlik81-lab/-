@@ -24,7 +24,8 @@ import {
   SegmentControl,
   SettingsField,
 } from 'src/pedometer/components';
-import { synchronizeAppUpdates } from 'src/pedometer/app-updates';
+import { createAppUpdateSynchronizer, watchPendingAppUpdates } from 'src/pedometer/app-updates';
+import type { AppUpdateSynchronizationInput } from 'src/pedometer/contracts/app-updates';
 import { FoodCameraSlide } from 'src/pedometer/food-camera';
 import { formatDate, formatDecimal, formatInteger, formatTime } from 'src/pedometer/formatting';
 import { calculateWalkingMetrics, getDateKey, getHistoryPoints, getHistorySummary, getStartOfDay } from 'src/pedometer/history';
@@ -71,6 +72,11 @@ export default function App() {
   const [historySynchronizer] = useState(() => new StepHistorySynchronizer({ load: loadRecords, save: saveRecords }));
 
   const [selectedViewMode, setSelectedViewMode] = useState<ViewMode>('today');
+  const selectedViewModeReference = useRef<ViewMode>(selectedViewMode);
+  const [appUpdateSynchronizer] = useState(() => createAppUpdateSynchronizer(() => ({
+    isForeground: AppState.currentState === 'active',
+    canReload: selectedViewModeReference.current !== 'settings' && selectedViewModeReference.current !== 'food',
+  })));
   const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('week');
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => createSettingsDraft(defaultSettings));
@@ -284,13 +290,21 @@ export default function App() {
     }
   }, [historySynchronizer, publishRecords, startTracking, stopTracking]);
 
-  const synchronizeInstalledApp = useCallback(async (): Promise<void> => {
-    const updateSynchronizationResult = await synchronizeAppUpdates();
+  const synchronizeInstalledApp = useCallback(async (
+    input: AppUpdateSynchronizationInput = { checkForUpdate: true },
+  ): Promise<void> => {
+    const updateSynchronizationResult = await appUpdateSynchronizer.synchronize(input);
 
     if (updateSynchronizationResult.status === 'error') {
       console.warn(updateSynchronizationResult.message);
     }
-  }, []);
+  }, [appUpdateSynchronizer]);
+
+  useEffect(() => {
+    const previousViewMode = selectedViewModeReference.current;
+    selectedViewModeReference.current = selectedViewMode;
+    if (previousViewMode !== selectedViewMode) void synchronizeInstalledApp({ checkForUpdate: false });
+  }, [selectedViewMode, synchronizeInstalledApp]);
 
   useEffect(() => {
     void refresh();
@@ -308,6 +322,9 @@ export default function App() {
         void synchronizeInstalledApp();
       }
     });
+    const pendingAppUpdateSubscription = watchPendingAppUpdates(() => {
+      void synchronizeInstalledApp({ checkForUpdate: false });
+    });
     const appUpdateInterval = setInterval(() => {
       void synchronizeInstalledApp();
     }, appUpdateCheckIntervalMilliseconds);
@@ -315,6 +332,7 @@ export default function App() {
     return () => {
       stopTracking();
       appStateSubscription.remove();
+      pendingAppUpdateSubscription.remove();
       clearInterval(appUpdateInterval);
     };
   }, [refresh, stopTracking, synchronizeInstalledApp]);

@@ -5,6 +5,7 @@
   "build": {
     "production": {
       "channel": "production",
+      "environment": "production",
       "credentialsSource": "local",
       "android": {
         "buildType": "apk"

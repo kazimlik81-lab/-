@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["tests/history-sync.test.ts"]
+  "include": ["tests/**/*.test.ts", "scripts/validate-updates-config.ts"]
 }
